@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Zendesk Ticket Tracker",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "description": "Track open, new, and team tickets on Zendesk with a floating widget. Double-click to count. View daily, weekly, and monthly stats with charts. Cloud sync across devices.",
   "icons": {
     "16": "icons/icon16.png",

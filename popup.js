@@ -576,10 +576,37 @@ function triggerDownload(content, filename, mimeType) {
 }
 
 $('export-csv').addEventListener('click', () => {
-    chrome.runtime.sendMessage({ action: 'EXPORT', format: 'csv' }, (response) => {
+    // Build a human-readable filename that reflects the selected period
+    let fileLabel = new Date().toISOString().split('T')[0]; // default: today
+    if (customRangeParams) {
+        if (customRangeParams.date) {
+            fileLabel = customRangeParams.date;
+        } else if (customRangeParams.weekStart) {
+            const end = new Date(customRangeParams.weekStart);
+            end.setDate(end.getDate() + 6);
+            fileLabel = `week-${customRangeParams.weekStart}_${fmtDateKey(end)}`;
+        } else if (customRangeParams.month) {
+            fileLabel = customRangeParams.month;
+        }
+    } else if (currentRange === 'week') {
+        // Rolling last-7-days: label as the 7-day span
+        const today = new Date();
+        const weekAgo = new Date(); weekAgo.setDate(today.getDate() - 6);
+        fileLabel = `week-${fmtDateKey(weekAgo)}_${fmtDateKey(today)}`;
+    } else if (currentRange === 'month') {
+        // Rolling current month
+        const now = new Date();
+        fileLabel = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    }
+
+    chrome.runtime.sendMessage({
+        action: 'EXPORT',
+        format: 'csv',
+        rangeType: currentRange,
+        rangeParams: customRangeParams
+    }, (response) => {
         if (chrome.runtime.lastError || !response) return;
-        const today = new Date().toISOString().split('T')[0];
-        triggerDownload(response.data, `tickets-${today}.csv`, 'text/csv');
+        triggerDownload(response.data, `tickets-${fileLabel}.csv`, 'text/csv');
         showToast('✓ CSV exported');
     });
 });

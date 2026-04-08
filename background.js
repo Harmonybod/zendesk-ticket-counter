@@ -83,7 +83,7 @@ async function saveLocal(data) {
 
 // ── Cloud Sync: Push to Firestore ─────────────
 
-async function syncToCloud(dailyTotals, settings) {
+async function syncToCloud(dailyTotals, ticketLog, settings) {
   const syncId = settings.syncId || (await getLocal()).syncId;
   if (!syncId) {
     console.log('[ZTK Cloud] No Sync ID set, skipping cloud sync');
@@ -96,7 +96,7 @@ async function syncToCloud(dailyTotals, settings) {
 
   try {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
-    await firestoreWrite(syncId, dailyTotals, settings);
+    await firestoreWrite(syncId, dailyTotals, ticketLog, settings);
     console.log('[ZTK Cloud] ✓ Successfully synced to Firestore');
     return true;
   } catch (e) {
@@ -125,7 +125,7 @@ async function pullFromCloud() {
     if (!remoteData) {
       console.log('[ZTK Cloud] No data found in Firestore for this Sync ID — uploading local data');
       // First time: push local data to cloud
-      await syncToCloud(localData.dailyTotals, {
+      await syncToCloud(localData.dailyTotals, localData.ticketLog, {
         agentName: localData.agentName,
         theme: localData.theme,
         countingEnabled: localData.countingEnabled,
@@ -134,11 +134,14 @@ async function pullFromCloud() {
       return localData.dailyTotals;
     }
 
-    // Merge: max-per-field strategy
+    // Merge: max-per-field strategy for dailyTotals
     const merged = mergeDailyTotals(localData.dailyTotals, remoteData.dailyTotals);
 
+    // Merge ticketLog: union of all unique entries
+    const mergedLog = mergeTicketLogs(localData.ticketLog, remoteData.ticketLog);
+
     // Save merged data locally
-    const updates = { dailyTotals: merged };
+    const updates = { dailyTotals: merged, ticketLog: mergedLog };
     if (remoteData.agentName && !localData.agentName) {
       updates.agentName = remoteData.agentName;
     }
@@ -148,7 +151,7 @@ async function pullFromCloud() {
     // If we changed anything, push merged result back
     if (dailyTotalsChanged(merged, remoteData.dailyTotals)) {
       console.log('[ZTK Cloud] Local had data not in cloud, pushing merged result back');
-      await syncToCloud(merged, {
+      await syncToCloud(merged, mergedLog, {
         agentName: updates.agentName || localData.agentName,
         theme: localData.theme,
         countingEnabled: localData.countingEnabled,
@@ -220,7 +223,7 @@ async function saveAll(data) {
   if (data.dailyTotals !== undefined) {
     try {
       const localData = await getLocal();
-      await syncToCloud(data.dailyTotals, {
+      await syncToCloud(data.dailyTotals, data.ticketLog ?? localData.ticketLog, {
         agentName: data.agentName ?? localData.agentName,
         theme: data.theme ?? localData.theme,
         countingEnabled: data.countingEnabled ?? localData.countingEnabled,
@@ -510,11 +513,50 @@ const TYPE_TO_COLUMN = {
   'closed': 'Closed Tickets if any'
 };
 
-async function exportData(format) {
+async function exportData(format, rangeType, rangeParams) {
   const data = await getAll();
   if (format === 'json') {
     return JSON.stringify(data, null, 2);
   }
+
+  // ── Determine the set of valid date keys for this range ───────────────────
+  const dt = data.dailyTotals;
+  let validDates = null; // null = all dates (fallback)
+
+  if (rangeType === 'today') {
+    // Custom date picked, or default to actual today
+    const targetDate = (rangeParams && rangeParams.date) ? rangeParams.date : todayKey();
+    validDates = new Set([targetDate]);
+  } else if (rangeType === 'week') {
+    if (rangeParams && rangeParams.weekStart) {
+      // Specific week: weekStart + 6 days
+      const keys = getLastNDaysKeys(7, (() => {
+        const d = new Date(rangeParams.weekStart);
+        d.setDate(d.getDate() + 6);
+        return d;
+      })());
+      validDates = new Set(keys);
+    } else {
+      // Rolling last-7-days
+      validDates = new Set(getLastNDaysKeys(7));
+    }
+  } else if (rangeType === 'month') {
+    if (rangeParams && rangeParams.month) {
+      // Specific month: all days of that YYYY-MM
+      const [y, m] = rangeParams.month.split('-').map(Number);
+      const daysInMonth = new Date(y, m, 0).getDate();
+      const days = [];
+      for (let d = 1; d <= daysInMonth; d++) {
+        days.push(`${y}-${String(m).padStart(2,'0')}-${String(d).padStart(2,'0')}`);
+      }
+      validDates = new Set(days);
+    } else {
+      // Current calendar month
+      const keys = getCurrentMonthKeys(dt);
+      validDates = new Set(keys);
+    }
+  }
+  // If rangeType is undefined/null, validDates stays null → export everything
 
   // CSV matching the boss's Excel format
   const headers = [
@@ -531,12 +573,34 @@ async function exportData(format) {
   const agentName = data.agentName || 'Eyosias Belhu';
 
   // Sort ticket log by date then timestamp
-  const sortedLog = [...data.ticketLog].sort((a, b) => {
+  let sortedLog = [...data.ticketLog].sort((a, b) => {
     if (a.date !== b.date) return a.date.localeCompare(b.date);
     return a.timestamp - b.timestamp;
   });
 
+  // ── Step 1: Range filter ──────────────────────────────────────────────────
+  if (validDates !== null) {
+    sortedLog = sortedLog.filter(entry => validDates.has(entry.date));
+  }
+
+  // ── Step 2: Dedup — per (ticketNumber, date), keep only latest entry ──────
+  // Build a map keyed by "ticketNumber:date" → keep the entry with the
+  // highest timestamp (= most recent status).
+  const dedupMap = new Map();
   for (const entry of sortedLog) {
+    const key = `${entry.ticketNumber}:${entry.date}`;
+    // sortedLog is already sorted ascending by timestamp, so later entries
+    // naturally overwrite earlier ones — last write wins.
+    dedupMap.set(key, entry);
+  }
+
+  // Re-sort deduplicated entries by date then timestamp
+  const dedupedLog = Array.from(dedupMap.values()).sort((a, b) => {
+    if (a.date !== b.date) return a.date.localeCompare(b.date);
+    return a.timestamp - b.timestamp;
+  });
+
+  for (const entry of dedupedLog) {
     const shiftInfo = getShiftInfo(entry.date);
     // Format date as M/D/YYYY
     const [y, m, d] = entry.date.split('-');
@@ -567,8 +631,11 @@ async function exportData(format) {
   }
 
   // If no ticket log entries, fall back to daily totals summary
-  if (sortedLog.length === 0) {
-    const sorted = Object.keys(data.dailyTotals).sort();
+  if (dedupedLog.length === 0) {
+    // Only show days within the valid range
+    const sorted = Object.keys(data.dailyTotals)
+      .filter(k => validDates === null || validDates.has(k))
+      .sort();
     for (const k of sorted) {
       const dt = data.dailyTotals[k];
       const shiftInfo = getShiftInfo(k);
@@ -691,7 +758,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           sendResponse(await getStatsForRange(msg.rangeType, msg.params));
           break;
         case 'EXPORT':
-          sendResponse({ data: await exportData(msg.format) });
+          sendResponse({ data: await exportData(msg.format, msg.rangeType, msg.rangeParams) });
           break;
         case 'SET_AGENT_NAME':
           sendResponse(await setAgentName(msg.name));

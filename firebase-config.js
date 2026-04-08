@@ -19,10 +19,11 @@ const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_
  * Input:  { "2026-03-13": { open: 5, new: 3, team: 2 } }
  * Output: Firestore-compatible fields object
  */
-function toFirestoreDoc(dailyTotals, settings = {}) {
+function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
   return {
     fields: {
       dailyTotalsJson: { stringValue: JSON.stringify(dailyTotals) },
+      ticketLogJson:   { stringValue: JSON.stringify(ticketLog || []) },
       agentName: { stringValue: settings.agentName || '' },
       theme: { stringValue: settings.theme || 'dark' },
       countingEnabled: { booleanValue: settings.countingEnabled !== false },
@@ -36,19 +37,28 @@ function toFirestoreDoc(dailyTotals, settings = {}) {
  */
 function fromFirestoreDoc(doc) {
   if (!doc || !doc.fields) {
-    return { dailyTotals: {}, agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
+    return { dailyTotals: {}, ticketLog: [], agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
   }
 
   const f = doc.fields;
   let dailyTotals = {};
+  let ticketLog = [];
+
   try {
     dailyTotals = JSON.parse(f.dailyTotalsJson?.stringValue || '{}');
   } catch (e) {
     console.warn('[ZTK Firebase] Failed to parse dailyTotals from Firestore:', e.message);
   }
 
+  try {
+    ticketLog = JSON.parse(f.ticketLogJson?.stringValue || '[]');
+  } catch (e) {
+    console.warn('[ZTK Firebase] Failed to parse ticketLog from Firestore:', e.message);
+  }
+
   return {
     dailyTotals,
+    ticketLog,
     agentName: f.agentName?.stringValue || '',
     theme: f.theme?.stringValue || 'dark',
     countingEnabled: f.countingEnabled?.booleanValue !== false,
@@ -57,14 +67,40 @@ function fromFirestoreDoc(doc) {
 }
 
 /**
+ * Merge two ticketLog arrays.
+ * Dedup key: ticketNumber + date + type (each unique action is preserved).
+ * Entries from both sides are unioned; duplicates by composite key keep the
+ * one with the later timestamp.
+ * Result is sorted ascending by timestamp.
+ */
+function mergeTicketLogs(local, remote) {
+  const map = new Map();
+
+  const addEntries = (entries) => {
+    for (const entry of entries) {
+      // Composite key: same ticket + same day + same action type
+      const key = `${entry.ticketNumber}:${entry.date}:${entry.type}:${entry.timestamp}`;
+      if (!map.has(key) || entry.timestamp > map.get(key).timestamp) {
+        map.set(key, entry);
+      }
+    }
+  };
+
+  addEntries(local || []);
+  addEntries(remote || []);
+
+  return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
+}
+
+/**
  * Write a document to Firestore (create or overwrite).
  * @param {string} syncId - The sync identifier (used as document ID)
  * @param {object} dailyTotals - The daily totals data
  * @param {object} settings - Agent name, theme, counting toggle
  */
-async function firestoreWrite(syncId, dailyTotals, settings) {
+async function firestoreWrite(syncId, dailyTotals, ticketLog, settings) {
   const url = `${FIRESTORE_BASE}/sync/${encodeURIComponent(syncId)}?key=${FIREBASE_CONFIG.apiKey}`;
-  const body = toFirestoreDoc(dailyTotals, settings);
+  const body = toFirestoreDoc(dailyTotals, ticketLog, settings);
 
   const response = await fetch(url, {
     method: 'PATCH',
