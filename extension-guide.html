@@ -1,0 +1,1191 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <title>Zendesk Ticket Tracker — How It All Works</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=Fira+Code:wght@400;600&display=swap');
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f4f6fb;
+            color: #1a1d2e;
+            line-height: 1.7;
+            font-size: 15px
+        }
+
+        .cover {
+            background: linear-gradient(135deg, #1a1d35, #6c63ff);
+            color: #fff;
+            padding: 80px 60px 60px;
+            text-align: center;
+            page-break-after: always
+        }
+
+        .cover h1 {
+            font-size: 42px;
+            font-weight: 800;
+            margin-bottom: 12px;
+            letter-spacing: -1px
+        }
+
+        .cover p {
+            font-size: 18px;
+            opacity: .8;
+            max-width: 520px;
+            margin: 0 auto 30px
+        }
+
+        .cover .badge {
+            display: inline-block;
+            background: rgba(255, 255, 255, .15);
+            border: 1px solid rgba(255, 255, 255, .25);
+            border-radius: 30px;
+            padding: 6px 18px;
+            font-size: 13px;
+            margin: 4px
+        }
+
+        .toc {
+            background: #fff;
+            max-width: 820px;
+            margin: 40px auto;
+            border-radius: 16px;
+            padding: 36px 44px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, .07)
+        }
+
+        .toc h2 {
+            font-size: 20px;
+            font-weight: 700;
+            margin-bottom: 16px;
+            color: #6c63ff
+        }
+
+        .toc ol {
+            padding-left: 20px
+        }
+
+        .toc li {
+            padding: 4px 0;
+            font-size: 14px
+        }
+
+        .toc a {
+            color: #2980b9;
+            text-decoration: none
+        }
+
+        .toc a:hover {
+            text-decoration: underline
+        }
+
+        .page {
+            max-width: 820px;
+            margin: 0 auto 40px;
+            background: #fff;
+            border-radius: 16px;
+            padding: 44px;
+            box-shadow: 0 4px 24px rgba(0, 0, 0, .07)
+        }
+
+        h2.section-title {
+            font-size: 26px;
+            font-weight: 800;
+            color: #1a1d35;
+            margin-bottom: 6px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #6c63ff
+        }
+
+        h3 {
+            font-size: 17px;
+            font-weight: 700;
+            color: #3a3d5c;
+            margin: 28px 0 8px
+        }
+
+        h4 {
+            font-size: 14px;
+            font-weight: 700;
+            color: #6c63ff;
+            margin: 20px 0 6px;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        p {
+            margin-bottom: 14px;
+            color: #2d3050
+        }
+
+        .analogy {
+            background: #f0eeff;
+            border-left: 4px solid #6c63ff;
+            border-radius: 0 10px 10px 0;
+            padding: 14px 18px;
+            margin: 16px 0;
+            font-size: 14px
+        }
+
+        .analogy strong {
+            color: #6c63ff
+        }
+
+        .note {
+            background: #fff8e6;
+            border-left: 4px solid #f39c12;
+            border-radius: 0 10px 10px 0;
+            padding: 14px 18px;
+            margin: 16px 0;
+            font-size: 14px
+        }
+
+        .note strong {
+            color: #e67e22
+        }
+
+        .code-block {
+            background: #1a1d2e;
+            color: #e8eaf6;
+            border-radius: 12px;
+            padding: 20px 22px;
+            margin: 16px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            line-height: 1.7;
+            overflow-x: auto;
+            position: relative
+        }
+
+        .code-block .lang {
+            position: absolute;
+            top: 10px;
+            right: 14px;
+            font-size: 10px;
+            color: rgba(255, 255, 255, .35);
+            font-family: 'Inter', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: .5px
+        }
+
+        .code-block .comment {
+            color: #6c9bd1
+        }
+
+        .code-block .kw {
+            color: #c792ea
+        }
+
+        .code-block .str {
+            color: #c3e88d
+        }
+
+        .code-block .fn {
+            color: #82aaff
+        }
+
+        .code-block .num {
+            color: #f78c6c
+        }
+
+        .code-block .key {
+            color: #ffcb6b
+        }
+
+        .file-card {
+            display: flex;
+            align-items: flex-start;
+            gap: 16px;
+            background: #f8f9ff;
+            border: 1px solid #e0e3f5;
+            border-radius: 12px;
+            padding: 16px 20px;
+            margin: 12px 0
+        }
+
+        .file-icon {
+            width: 44px;
+            height: 44px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+            flex-shrink: 0;
+            color: #fff;
+            font-weight: 800
+        }
+
+        .file-icon.json {
+            background: #e67e22
+        }
+
+        .file-icon.bg {
+            background: #8e44ad
+        }
+
+        .file-icon.content {
+            background: #27ae60
+        }
+
+        .file-icon.css {
+            background: #2980b9
+        }
+
+        .file-icon.html {
+            background: #e74c3c
+        }
+
+        .file-icon.js {
+            background: #f1c40f;
+            color: #1a1d2e
+        }
+
+        .file-icon.chart {
+            background: #1abc9c
+        }
+
+        .file-icon.icon {
+            background: #34495e
+        }
+
+        .file-info h4 {
+            margin: 0 0 4px;
+            font-size: 15px;
+            color: #1a1d2e;
+            font-family: 'Fira Code', monospace
+        }
+
+        .file-info p {
+            margin: 0;
+            font-size: 13px;
+            color: #5a5e7a
+        }
+
+        .flow {
+            display: flex;
+            flex-direction: column;
+            gap: 0;
+            margin: 20px 0
+        }
+
+        .flow-step {
+            display: flex;
+            align-items: flex-start;
+            gap: 14px;
+            position: relative
+        }
+
+        .flow-step::before {
+            content: '';
+            position: absolute;
+            left: 17px;
+            top: 40px;
+            width: 2px;
+            height: calc(100% - 10px);
+            background: #eee
+        }
+
+        .flow-step:last-child::before {
+            display: none
+        }
+
+        .flow-num {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #6c63ff, #3ecfcf);
+            color: #fff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 14px;
+            flex-shrink: 0;
+            z-index: 1
+        }
+
+        .flow-body {
+            padding: 4px 0 24px
+        }
+
+        .flow-body strong {
+            display: block;
+            font-size: 15px;
+            margin-bottom: 4px
+        }
+
+        .flow-body span {
+            font-size: 13px;
+            color: #5a5e7a
+        }
+
+        .arch-diagram {
+            background: #1a1d2e;
+            border-radius: 14px;
+            padding: 28px;
+            margin: 20px 0;
+            font-family: 'Fira Code', monospace;
+            font-size: 13px;
+            color: #e8eaf6;
+            line-height: 1.9
+        }
+
+        .arch-diagram .box {
+            display: inline-block;
+            border: 1px solid rgba(255, 255, 255, .2);
+            border-radius: 6px;
+            padding: 4px 12px
+        }
+
+        .arch-diagram .red {
+            color: #ff6b6b
+        }
+
+        .arch-diagram .yellow {
+            color: #ffd93d
+        }
+
+        .arch-diagram .blue {
+            color: #74b9ff
+        }
+
+        .arch-diagram .purple {
+            color: #c792ea
+        }
+
+        .arch-diagram .green {
+            color: #c3e88d
+        }
+
+        .arch-diagram .teal {
+            color: #3ecfcf
+        }
+
+        .arch-diagram .dim {
+            color: rgba(255, 255, 255, .35)
+        }
+
+        .two-col {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            margin: 16px 0
+        }
+
+        .col-card {
+            background: #f8f9ff;
+            border: 1px solid #e0e3f5;
+            border-radius: 12px;
+            padding: 16px
+        }
+
+        .col-card h4 {
+            margin: 0 0 8px;
+            color: #6c63ff
+        }
+
+        .col-card ul {
+            padding-left: 16px;
+            font-size: 13px;
+            color: #3a3d5c
+        }
+
+        .col-card li {
+            padding: 2px 0
+        }
+
+        @media print {
+            body {
+                background: #fff
+            }
+
+            .cover {
+                page-break-after: always
+            }
+
+            .page {
+                box-shadow: none;
+                page-break-inside: avoid;
+                margin-bottom: 0;
+                border-radius: 0;
+                border-top: 1px solid #eee
+            }
+
+            .toc {
+                box-shadow: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <!-- ═══════════════════════════════════════════ COVER ═══ -->
+    <div class="cover">
+        <div style="font-size:56px;margin-bottom:20px">🎫</div>
+        <h1>Zendesk Ticket Tracker</h1>
+        <p>How the Chrome Extension Works — Explained Simply</p>
+        <div>
+            <span class="badge">📁 8 Files</span>
+            <span class="badge">🔌 Chrome Extension</span>
+            <span class="badge">💾 Persistent Storage</span>
+            <span class="badge">📊 Charts</span>
+        </div>
+        <div style="margin-top:40px;opacity:.5;font-size:13px">Open in Chrome → Press Ctrl+P → Save as PDF</div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ TOC ═══ -->
+    <div class="toc">
+        <h2>📋 Table of Contents</h2>
+        <ol>
+            <li><a href="#big-picture">The Big Picture — What is a Chrome Extension?</a></li>
+            <li><a href="#all-files">All 8 Files at a Glance</a></li>
+            <li><a href="#manifest">manifest.json — The Master Config</a></li>
+            <li><a href="#background">background.js — The Brain</a></li>
+            <li><a href="#content">content.js — The Widget on Zendesk</a></li>
+            <li><a href="#widget-css">widget.css — Making the Widget Look Good</a></li>
+            <li><a href="#popup">popup.html + popup.css + popup.js — The Dashboard</a></li>
+            <li><a href="#chart">chart.min.js — Drawing Charts</a></li>
+            <li><a href="#how-talk">How the Files Talk to Each Other</a></li>
+            <li><a href="#storage">How Data is Saved Forever</a></li>
+            <li><a href="#double-click">How Double-Click Detection Works</a></li>
+            <li><a href="#flow">The Full Journey of One Ticket Click</a></li>
+        </ol>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 1. BIG PICTURE ═══ -->
+    <div class="page" id="big-picture">
+        <h2 class="section-title">1. The Big Picture</h2>
+        <h3>What is a Chrome Extension?</h3>
+        <p>A Chrome Extension is like a small app that lives <em>inside</em> your web browser. It can add buttons to
+            pages, watch what you do, save data, and show you information — all without touching the internet.</p>
+
+        <div class="analogy">
+            <strong>🏠 Think of it like this:</strong> Chrome is your house. Zendesk is a room inside. A Chrome
+            extension is like a tiny helper you placed in that room — it can see that room, press buttons there, and
+            write notes. But it stays quietly in the corner unless you call it.
+        </div>
+
+        <h3>The 3 Worlds of This Extension</h3>
+        <div class="arch-diagram">
+            <span class="purple">╔══════════════════════════════════════════════════╗</span><br />
+            <span class="purple">║</span> <span class="red">ZENDESK PAGE</span> <span class="dim">(what the agent
+                sees)</span> <span class="purple">║</span><br />
+            <span class="purple">║</span> 🔴 🟡 🔵 Floating Widget ← content.js <span class="purple">║</span><br />
+            <span class="purple">╚═══════════════════╦════════════════════════════╝</span><br />
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                class="teal">║ messages</span><br />
+            <span class="green">╔══════════════════╩═════════════════════════════╗</span><br />
+            <span class="green">║</span> <span class="yellow">BACKGROUND</span> <span class="dim">(always running,
+                invisible)</span> <span class="green">║</span><br />
+            <span class="green">║</span> background.js → stores data, calculates stats <span
+                class="green">║</span><br />
+            <span class="green">╚══════════════════╦═════════════════════════════╝</span><br />
+            &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span
+                class="teal">║ messages</span><br />
+            <span class="blue">╔══════════════════╩═════════════════════════════╗</span><br />
+            <span class="blue">║</span> <span class="teal">POPUP</span> <span class="dim">(opens when you click the TT
+                icon)</span> <span class="blue">║</span><br />
+            <span class="blue">║</span> popup.html + popup.js → dashboard + chart <span class="blue">║</span><br />
+            <span class="blue">╚════════════════════════════════════════════════╝</span>
+        </div>
+        <p>These three worlds <strong>cannot directly touch each other's code</strong>. They communicate by sending
+            <strong>messages</strong> — like texting between people in different rooms.</p>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 2. ALL FILES ═══ -->
+    <div class="page" id="all-files">
+        <h2 class="section-title">2. All 8 Files at a Glance</h2>
+
+        <div class="file-card">
+            <div class="file-icon json">{ }</div>
+            <div class="file-info">
+                <h4>manifest.json</h4>
+                <p>The <strong>ID card</strong> of the extension. Chrome reads this first to know what the extension is,
+                    what permissions it needs, and which file does what job.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon bg">⚙</div>
+            <div class="file-info">
+                <h4>background.js</h4>
+                <p>The <strong>brain / server</strong>. Always running in the background (even when you don't see
+                    anything). Saves data, calculates totals, handles undo, does exports.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon content">🖥</div>
+            <div class="file-info">
+                <h4>content.js</h4>
+                <p>The <strong>widget injector</strong>. Runs inside the Zendesk page. Builds the floating 🔴🟡🔵
+                    buttons, detects double-clicks, and sends messages to background.js.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon css">🎨</div>
+            <div class="file-info">
+                <h4>widget.css</h4>
+                <p>The <strong>stylist for the widget</strong>. Controls colors, sizes, animations (pulse, float +1),
+                    and the minimize/expand collapsed state.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon html">📄</div>
+            <div class="file-info">
+                <h4>popup.html</h4>
+                <p>The <strong>dashboard layout</strong>. Raw HTML structure — the boxes, buttons, chart area, range
+                    switcher. Like the skeleton of the dashboard.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon css">🎨</div>
+            <div class="file-info">
+                <h4>popup.css</h4>
+                <p>The <strong>stylist for the dashboard</strong>. Dark mode, gradient cards, animated stat numbers,
+                    Inter font, chart wrapper.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon js">JS</div>
+            <div class="file-info">
+                <h4>popup.js</h4>
+                <p>The <strong>dashboard engine</strong>. Fetches stats from background.js, updates numbers on screen,
+                    renders the chart, handles undo/export/agent-name.</p>
+            </div>
+        </div>
+
+        <div class="file-card">
+            <div class="file-icon chart">📈</div>
+            <div class="file-info">
+                <h4>chart.min.js</h4>
+                <p>A <strong>pre-built charting library</strong> (Chart.js v4). Bundled locally so no internet is
+                    needed. Draws the bar charts in the popup.</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 3. MANIFEST ═══ -->
+    <div class="page" id="manifest">
+        <h2 class="section-title">3. manifest.json — The ID Card</h2>
+
+        <div class="analogy">
+            <strong>📋 Analogy:</strong> Imagine you're starting a new job. HR gives you a form: What's your name? What
+            rooms can you enter? What's your role? <code>manifest.json</code> is exactly that form — Chrome reads it the
+            moment you install the extension.
+        </div>
+
+        <div class="code-block">
+            <div class="lang">JSON</div>
+            <span class="comment">// Chrome reads this file FIRST. It tells Chrome everything.</span>
+            {
+            <span class="key">"manifest_version"</span>: <span class="num">3</span>, <span class="comment">// Must be 3
+                (the modern standard)</span>
+            <span class="key">"name"</span>: <span class="str">"Zendesk Ticket Tracker"</span>, <span class="comment">//
+                Extension name shown in Chrome</span>
+
+            <span class="key">"permissions"</span>: [<span class="str">"storage"</span>, <span
+                class="str">"activeTab"</span>],
+            <span class="comment">// "storage" = can save data on your computer</span>
+            <span class="comment">// "activeTab" = can see which tab is open</span>
+
+            <span class="key">"host_permissions"</span>: [<span class="str">"*://*.zendesk.com/*"</span>],
+            <span class="comment">// Only runs on Zendesk pages — nowhere else!</span>
+
+            <span class="key">"background"</span>: { <span class="key">"service_worker"</span>: <span
+                class="str">"background.js"</span> },
+            <span class="comment">// This file runs silently in the background always</span>
+
+            <span class="key">"content_scripts"</span>: [{
+            <span class="key">"matches"</span>: [<span class="str">"*://*.zendesk.com/*"</span>],
+            <span class="key">"js"</span>: [<span class="str">"content.js"</span>], <span class="comment">// Inject this
+                JS into Zendesk</span>
+            <span class="key">"css"</span>: [<span class="str">"widget.css"</span>] <span class="comment">// Inject this
+                CSS into Zendesk</span>
+            }],
+
+            <span class="key">"action"</span>: { <span class="key">"default_popup"</span>: <span
+                class="str">"popup.html"</span> }
+            <span class="comment">// When user clicks the TT icon → open popup.html</span>
+            }
+        </div>
+
+        <h3>Key Concepts</h3>
+        <div class="two-col">
+            <div class="col-card">
+                <h4>Manifest V3</h4>
+                <ul>
+                    <li>The current Chrome standard</li>
+                    <li>Uses "service workers" not "background pages"</li>
+                    <li>More secure by design</li>
+                    <li>Extensions must declare all permissions upfront</li>
+                </ul>
+            </div>
+            <div class="col-card">
+                <h4>host_permissions</h4>
+                <ul>
+                    <li><code>*://*.zendesk.com/*</code></li>
+                    <li>The <code>*</code> means "any" (http or https)</li>
+                    <li><code>*.zendesk.com</code> = any subdomain</li>
+                    <li>e.g. <code>yourcompany.zendesk.com</code></li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 4. BACKGROUND ═══ -->
+    <div class="page" id="background">
+        <h2 class="section-title">4. background.js — The Brain</h2>
+
+        <div class="analogy">
+            <strong>🧠 Analogy:</strong> background.js is like a secretary who works in a back office with no windows.
+            You (the widget) shout through the wall: "Save a red ticket!" The secretary writes it in a logbook and
+            shouts back "Done!" The secretary never sleeps — always ready to receive messages.
+        </div>
+
+        <h3>The Storage Format</h3>
+        <p>All data is saved in <code>chrome.storage.local</code> — the browser's built-in safe box. It never deletes
+            unless you tell it to. The data looks like this:</p>
+
+        <div class="code-block">
+            <div class="lang">JSON (stored data)</div>
+            {
+            <span class="key">"events"</span>: [
+            { <span class="key">"type"</span>: <span class="str">"open"</span>, <span class="key">"timestamp"</span>:
+            <span class="num">1709100000000</span> },
+            { <span class="key">"type"</span>: <span class="str">"new"</span>, <span class="key">"timestamp"</span>:
+            <span class="num">1709100060000</span> },
+            { <span class="key">"type"</span>: <span class="str">"team"</span>, <span class="key">"timestamp"</span>:
+            <span class="num">1709100120000</span> }
+            ],
+            <span class="comment">// ↑ Every double-click adds one entry here. Never deleted.</span>
+
+            <span class="key">"dailyTotals"</span>: {
+            <span class="str">"2026-02-28"</span>: { <span class="key">"open"</span>: <span class="num">5</span>, <span
+                class="key">"new"</span>: <span class="num">3</span>, <span class="key">"team"</span>: <span
+                class="num">2</span> },
+            <span class="str">"2026-02-27"</span>: { <span class="key">"open"</span>: <span class="num">8</span>, <span
+                class="key">"new"</span>: <span class="num">1</span>, <span class="key">"team"</span>: <span
+                class="num">4</span> }
+            }
+            <span class="comment">// ↑ Fast lookup by date. Updated every time an event is added.</span>
+            }
+        </div>
+
+        <h3>How dateKey() Works</h3>
+        <p>Every event gets a date key — a string like <code>"2026-02-28"</code> — so we can group tickets by day.</p>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="kw">function</span> <span class="fn">dateKey</span>(ts) { <span class="comment">// ts =
+                timestamp (milliseconds)</span>
+            <span class="kw">const</span> d = <span class="kw">new</span> <span class="fn">Date</span>(ts); <span
+                class="comment">// Convert ms → readable date</span>
+            <span class="kw">const</span> y = d.<span class="fn">getFullYear</span>(); <span class="comment">// e.g.
+                2026</span>
+            <span class="kw">const</span> m = <span class="fn">String</span>(d.<span class="fn">getMonth</span>() +
+            <span class="num">1</span>).<span class="fn">padStart</span>(<span class="num">2</span>, <span
+                class="str">'0'</span>); <span class="comment">// e.g. "02"</span>
+            <span class="kw">const</span> day = <span class="fn">String</span>(d.<span
+                class="fn">getDate</span>()).<span class="fn">padStart</span>(<span class="num">2</span>, <span
+                class="str">'0'</span>); <span class="comment">// e.g. "28"</span>
+            <span class="kw">return</span> <span class="str">`${y}-${m}-${day}`</span>; <span class="comment">// →
+                "2026-02-28"</span>
+            }
+        </div>
+
+        <h3>Listening for Messages</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="comment">// This runs whenever content.js or popup.js sends a message</span>
+            chrome.runtime.<span class="fn">onMessage</span>.<span class="fn">addListener</span>((msg, _sender,
+            sendResponse) => {
+            <span class="kw">switch</span> (msg.action) {
+            <span class="kw">case</span> <span class="str">'ADD_EVENT'</span>: sendResponse(<span
+                class="kw">await</span> <span class="fn">addEvent</span>(msg.type)); <span class="kw">break</span>;
+            <span class="kw">case</span> <span class="str">'UNDO'</span>: sendResponse(<span class="kw">await</span>
+            <span class="fn">undoLastEvent</span>()); <span class="kw">break</span>;
+            <span class="kw">case</span> <span class="str">'GET_STATS'</span>: sendResponse(<span
+                class="kw">await</span> <span class="fn">getStats</span>()); <span class="kw">break</span>;
+            <span class="kw">case</span> <span class="str">'EXPORT'</span>: sendResponse({ data: <span
+                class="kw">await</span> <span class="fn">exportData</span>(msg.format) }); <span
+                class="kw">break</span>;
+            }
+            <span class="kw">return true</span>; <span class="comment">// Keeps the channel open for async
+                replies</span>
+            });
+        </div>
+
+        <div class="note">
+            <strong>⚠ Why <code>return true</code>?</strong> Chrome closes the message channel after a function returns.
+            Since our storage operations are <em>async</em> (they take a moment), we need to return <code>true</code> to
+            tell Chrome "wait, I'll reply later."
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 5. CONTENT ═══ -->
+    <div class="page" id="content">
+        <h2 class="section-title">5. content.js — The Widget on Zendesk</h2>
+
+        <div class="analogy">
+            <strong>🖼 Analogy:</strong> content.js is like a sticker you put on a window (the Zendesk page). It draws a
+            little panel with colored circles on the page. It watches your mouse and reacts. It also talks to the brain
+            (background.js) when you double-click.
+        </div>
+
+        <h3>How the Widget is Built</h3>
+        <p>The widget is created entirely with JavaScript — no separate HTML file needed. We use <code>innerHTML</code>
+            to write HTML as a string and inject it:</p>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="kw">const</span> widget = document.<span class="fn">createElement</span>(<span
+                class="str">'div'</span>);
+            widget.id = <span class="str">'ztk-widget'</span>;
+            widget.innerHTML = <span class="str">`
+                &lt;div id="ztk-header"&gt;
+                &lt;div id="ztk-logo"&gt;TT&lt;/div&gt; &lt;!-- double-click to minimize --&gt;
+                &lt;/div&gt;
+                &lt;button class="ztk-btn ztk-btn-red" id="ztk-btn-open"&gt;&lt;/button&gt;
+                &lt;button class="ztk-btn ztk-btn-yellow" id="ztk-btn-new"&gt;&lt;/button&gt;
+                &lt;button class="ztk-btn ztk-btn-blue" id="ztk-btn-team"&gt;&lt;/button&gt;
+                `</span>;
+            document.body.<span class="fn">appendChild</span>(widget); <span class="comment">// Attach it to the
+                page</span>
+        </div>
+
+        <h3>Sending a Message to background.js</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="comment">// When a double-click is confirmed, we fire this:</span>
+            chrome.runtime.<span class="fn">sendMessage</span>({ action: <span class="str">'ADD_EVENT'</span>, type:
+            <span class="str">'open'</span> });
+            <span class="comment">// ↑ ↑</span>
+            <span class="comment">// what to do which button</span>
+        </div>
+
+        <h3>The Collapse / Expand Feature</h3>
+        <p>Double-clicking the TT logo simply toggles a CSS class called <code>ztk-collapsed</code> on the widget
+            element. CSS then hides the buttons automatically:</p>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            isCollapsed = !isCollapsed; <span class="comment">// flip true/false</span>
+            widget.<span class="fn">classList</span>.<span class="fn">toggle</span>(<span
+                class="str">'ztk-collapsed'</span>, isCollapsed);
+            <span class="comment">// Adds class "ztk-collapsed" when true, removes it when false</span>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 6. CSS ═══ -->
+    <div class="page" id="widget-css">
+        <h2 class="section-title">6. widget.css — Making It Look Good</h2>
+
+        <div class="analogy">
+            <strong>🎨 Analogy:</strong> If content.js builds the house out of bricks, widget.css paints it, decorates
+            it, and adds the animations. Without CSS, the widget would just be grey boxes.
+        </div>
+
+        <h3>The Glassmorphism Container</h3>
+        <div class="code-block">
+            <div class="lang">CSS</div>
+            <span class="fn">#ztk-widget</span> {
+            position: fixed; <span class="comment">/* Stays in place even as page scrolls */</span>
+            right: 16px; top: 50%; <span class="comment">/* Right side, vertically centered */</span>
+            transform: translateY(-50%); <span class="comment">/* Perfectly centered even if height changes */</span>
+            background: rgba(15, 18, 35, 0.90);<span class="comment">/* Dark + slightly transparent */</span>
+            backdrop-filter: blur(16px); <span class="comment">/* Blurs what's BEHIND the widget → glass effect
+                */</span>
+            border-radius: 16px; <span class="comment">/* Rounded corners */</span>
+            }
+        </div>
+
+        <h3>The Pulse Animation</h3>
+        <p>When you double-click a button, a glowing ring pulses outward and fades:</p>
+        <div class="code-block">
+            <div class="lang">CSS</div>
+            <span class="comment">/* Step 1: Define the animation */</span>
+            @keyframes ztk-pulse-red {
+            0% { box-shadow: 0 0 0 0px rgba(255,107,107, 0.7); } <span class="comment">/* Ring starts small */</span>
+            60% { box-shadow: 0 0 0 14px rgba(255,107,107, 0); } <span class="comment">/* Ring expands + fades */</span>
+            100% { box-shadow: 0 0 0 0px rgba(255,107,107, 0); } <span class="comment">/* Gone */</span>
+            }
+
+            <span class="comment">/* Step 2: Apply the animation class from JavaScript */</span>
+            <span class="fn">.ztk-btn-red.ztk-pulsing</span> {
+            animation: ztk-pulse-red 0.5s ease-out;
+            }
+        </div>
+
+        <h3>The Collapsed State</h3>
+        <div class="code-block">
+            <div class="lang">CSS</div>
+            <span class="comment">/* When .ztk-collapsed is on the widget, hide the buttons */</span>
+            <span class="fn">#ztk-widget.ztk-collapsed .ztk-btn-wrap</span> {
+            display: none; <span class="comment">/* Buttons disappear instantly */</span>
+            }
+            <span class="comment">/* The logo pulses gently to remind agent the widget is there */</span>
+            <span class="fn">#ztk-widget.ztk-collapsed #ztk-logo</span> {
+            animation: ztk-logo-hint 2s ease-out infinite;
+            }
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 7. POPUP ═══ -->
+    <div class="page" id="popup">
+        <h2 class="section-title">7. popup.html + popup.css + popup.js</h2>
+
+        <div class="analogy">
+            <strong>📊 Analogy:</strong> When you click the TT icon in Chrome's toolbar, Chrome opens
+            <code>popup.html</code> like a small window — like opening a mini website. <code>popup.css</code> styles it,
+            and <code>popup.js</code> makes it interactive.
+        </div>
+
+        <h3>popup.html — The Blueprint</h3>
+        <p>Every element you see in the dashboard has an <code>id</code> so JavaScript can find and update it:</p>
+        <div class="code-block">
+            <div class="lang">HTML</div>
+            <span class="comment">&lt;!-- The stat number for open tickets --&gt;</span>
+            &lt;div class=<span class="str">"stat-value"</span> id=<span class="str">"stat-open"</span>&gt;0&lt;/div&gt;
+            <span class="comment">&lt;!-- ↑
+                popup.js finds this by id and updates the number --&gt;</span>
+
+            <span class="comment">&lt;!-- The chart canvas - Chart.js draws here --&gt;</span>
+            &lt;canvas id=<span class="str">"main-chart"</span>&gt;&lt;/canvas&gt;
+
+            <span class="comment">&lt;!-- Load chart library FIRST, then our code --&gt;</span>
+            &lt;script src=<span class="str">"chart.min.js"</span>&gt;&lt;/script&gt;
+            &lt;script src=<span class="str">"popup.js"</span>&gt;&lt;/script&gt;
+        </div>
+
+        <h3>popup.js — Fetching Stats and Updating the Screen</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="comment">// 1. Ask background.js for the stats</span>
+            chrome.runtime.<span class="fn">sendMessage</span>({ action: <span class="str">'GET_STATS'</span> },
+            (response) => {
+            stats = response;
+            <span class="fn">renderStats</span>(); <span class="comment">// Fill in the numbers</span>
+            <span class="fn">renderChart</span>(); <span class="comment">// Draw the bar chart</span>
+            });
+
+            <span class="comment">// 2. Fill in the numbers</span>
+            <span class="kw">function</span> <span class="fn">renderStats</span>() {
+            <span class="kw">const</span> data = stats.today; <span class="comment">// or stats.week /
+                stats.month</span>
+            <span class="fn">$</span>(<span class="str">'stat-open'</span>).textContent = data.open; <span
+                class="comment">// Update the "Open" number</span>
+            <span class="fn">$</span>(<span class="str">'stat-new'</span>).textContent = data.new; <span
+                class="comment">// Update the "New" number</span>
+            <span class="fn">$</span>(<span class="str">'stat-team'</span>).textContent = data.team; <span
+                class="comment">// Update the "Team" number</span>
+            }
+            <span class="comment">// $ is just a shortcut: function $(id) { return document.getElementById(id) }</span>
+        </div>
+
+        <h3>Export to CSV — How Downloads Work</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="kw">function</span> <span class="fn">triggerDownload</span>(content, filename) {
+            <span class="kw">const</span> blob = <span class="kw">new</span> <span class="fn">Blob</span>([content], {
+            type: <span class="str">'text/csv'</span> });
+            <span class="comment">// ↑ Blob = Binary Large Object = a chunk of data in memory</span>
+
+            <span class="kw">const</span> url = URL.<span class="fn">createObjectURL</span>(blob);
+            <span class="comment">// ↑ Creates a temporary web address pointing to that data chunk</span>
+
+            <span class="kw">const</span> a = document.<span class="fn">createElement</span>(<span
+                class="str">'a'</span>);
+            a.href = url; a.download = filename;
+            a.<span class="fn">click</span>(); <span class="comment">// Simulates a user clicking a download link</span>
+            URL.<span class="fn">revokeObjectURL</span>(url); <span class="comment">// Cleanup: free the temporary
+                address</span>
+            }
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 8. CHART ═══ -->
+    <div class="page" id="chart">
+        <h2 class="section-title">8. chart.min.js — Drawing Charts</h2>
+
+        <div class="analogy">
+            <strong>📦 Analogy:</strong> chart.min.js is like a LEGO kit someone else designed. You don't need to know
+            how they built it — you just use its instructions (the API) to build a chart. The <code>.min</code> means
+            it's been "minified" — all spaces removed, variable names shortened so it loads faster.
+        </div>
+
+        <h3>How popup.js Uses Chart.js</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="kw">const</span> ctx = <span class="fn">$</span>(<span class="str">'main-chart'</span>).<span
+                class="fn">getContext</span>(<span class="str">'2d'</span>);
+            <span class="comment">// ↑ Gets a "drawing context" on the canvas element — like picking up a pencil</span>
+
+            chartInstance = <span class="kw">new</span> <span class="fn">Chart</span>(ctx, {
+            type: <span class="str">'bar'</span>, <span class="comment">// Bar chart</span>
+            data: {
+            labels: [<span class="str">'Mon'</span>, <span class="str">'Tue'</span>, <span class="str">'Wed'</span>,
+            ...],
+            datasets: [
+            { label: <span class="str">'Open'</span>, data: [<span class="num">5</span>,<span class="num">3</span>,<span
+                class="num">8</span>,...], backgroundColor: <span class="str">'rgba(255,107,107,0.85)'</span> },
+            { label: <span class="str">'New'</span>, data: [<span class="num">2</span>,<span class="num">1</span>,<span
+                class="num">4</span>,...], backgroundColor: <span class="str">'rgba(255,217,61,0.85)'</span> },
+            { label: <span class="str">'Team'</span>, data: [<span class="num">1</span>,<span class="num">2</span>,<span
+                class="num">3</span>,...], backgroundColor: <span class="str">'rgba(116,185,255,0.85)'</span> }
+            ]
+            }
+            });
+
+            <span class="comment">// Chart.js does ALL the drawing — you just provide the numbers.</span>
+        </div>
+
+        <div class="note">
+            <strong>💡 Why is it bundled locally?</strong> If we loaded it from the internet
+            (<code>cdn.jsdelivr.net</code>), Chrome would block it — extensions aren't supposed to make network requests
+            for code. So we downloaded it once and stored it as a file inside the extension folder.
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 9. HOW THEY TALK ═══ -->
+    <div class="page" id="how-talk">
+        <h2 class="section-title">9. How the Files Talk to Each Other</h2>
+
+        <div class="analogy">
+            <strong>📬 Analogy:</strong> Think of it like a post office system. content.js and popup.js are residents
+            who write letters. background.js is the post office that receives letters, does work, and sends replies.
+            They never visit each other's "house" directly — everything goes through messages.
+        </div>
+
+        <h3>Message Sending Pattern</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="comment">// ── SENDER (content.js or popup.js) ──────────────────────</span>
+            chrome.runtime.<span class="fn">sendMessage</span>(
+            { action: <span class="str">'ADD_EVENT'</span>, type: <span class="str">'open'</span> }, <span
+                class="comment">// The letter</span>
+            (response) => { <span class="comment">// The reply callback</span>
+            console.<span class="fn">log</span>(response.success); <span class="comment">// Do something with the
+                reply</span>
+            }
+            );
+
+            <span class="comment">// ── RECEIVER (background.js) ──────────────────────────────</span>
+            chrome.runtime.onMessage.<span class="fn">addListener</span>((msg, _sender, sendResponse) => {
+            <span class="kw">if</span> (msg.action === <span class="str">'ADD_EVENT'</span>) {
+            <span class="fn">addEvent</span>(msg.type).<span class="fn">then</span>(result => <span
+                class="fn">sendResponse</span>(result));
+            }
+            <span class="kw">return true</span>; <span class="comment">// Keep channel open</span>
+            });
+        </div>
+
+        <h3>Who Talks to Whom</h3>
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-body"><strong>content.js → background.js</strong><span>Sends ADD_EVENT when
+                        double-click detected. background.js saves it.</span></div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-body"><strong>popup.js → background.js</strong><span>Sends GET_STATS when popup opens.
+                        background.js returns all aggregated totals.</span></div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-body"><strong>popup.js → background.js</strong><span>Sends UNDO. background.js pops the
+                        last event and recalculates the day's totals.</span></div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-body"><strong>popup.js → background.js</strong><span>Sends EXPORT. background.js
+                        returns all data as CSV or JSON string.</span></div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-body"><strong>popup.js → Chart.js</strong><span>Not a message — direct function call.
+                        popup.js calls <code>new Chart()</code> from chart.min.js which is loaded on the same
+                        page.</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 10. STORAGE ═══ -->
+    <div class="page" id="storage">
+        <h2 class="section-title">10. How Data is Saved Forever</h2>
+
+        <div class="analogy">
+            <strong>🗃 Analogy:</strong> <code>chrome.storage.local</code> is like a filing cabinet bolted to the floor
+            inside Chrome. It survives browser restarts, computer restarts, extension reloads — everything. The only way
+            to remove data is to uninstall the extension or manually clear it.
+        </div>
+
+        <h3>Reading from Storage</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            chrome.storage.local.<span class="fn">get</span>([<span class="str">'events'</span>, <span
+                class="str">'dailyTotals'</span>], (result) => {
+            <span class="comment">// Chrome fetches the data and gives it to our function</span>
+            <span class="kw">const</span> events = result.events ?? [];
+            <span class="comment">// ↑↑
+                // ?? means "if this is null/undefined, use this default instead"</span>
+            });
+        </div>
+
+        <h3>Writing to Storage</h3>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            chrome.storage.local.<span class="fn">set</span>({
+            events: data.events,
+            dailyTotals: data.dailyTotals
+            }, () => {
+            console.<span class="fn">log</span>(<span class="str">'Saved!'</span>); <span class="comment">// Called
+                after save is confirmed</span>
+            });
+        </div>
+
+        <h3>The Append-Only Rule</h3>
+        <p>We <strong>never overwrite</strong> old events. We only ever <em>push</em> new ones onto the end of the
+            array. This means history is always intact:</p>
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            data.events.<span class="fn">push</span>({ type: <span class="str">'open'</span>, timestamp: Date.<span
+                class="fn">now</span>() });
+            <span class="comment">// .push() adds to the END of the array — never removes anything</span>
+            <span class="comment">// Date.now() = current time in milliseconds since Jan 1, 1970</span>
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 11. DOUBLE-CLICK ═══ -->
+    <div class="page" id="double-click">
+        <h2 class="section-title">11. How Double-Click Detection Works</h2>
+
+        <div class="analogy">
+            <strong>⏱ Analogy:</strong> Imagine a bouncer at a door who counts knocks. If you knock twice within 350ms —
+            that's a double-knock. If only one knock happens and 350ms passes without a second — it's ignored.
+        </div>
+
+        <div class="code-block">
+            <div class="lang">JavaScript</div>
+            <span class="kw">const</span> DOUBLE_CLICK_DELAY = <span class="num">350</span>; <span class="comment">//
+                milliseconds (0.35 seconds)</span>
+            <span class="kw">let</span> clickCounts = { open: <span class="num">0</span>, new: <span
+                class="num">0</span>, team: <span class="num">0</span> };
+            <span class="kw">let</span> clickTimers = { open: <span class="kw">null</span>, new: <span
+                class="kw">null</span>, team: <span class="kw">null</span> };
+
+            <span class="kw">function</span> <span class="fn">handleClick</span>(btn, type) {
+            clickCounts[type]++; <span class="comment">// Count this click (1st or 2nd)</span>
+
+            <span class="kw">if</span> (clickCounts[type] >= <span class="num">2</span>) {
+            <span class="comment">// ✅ DOUBLE CLICK — count the ticket!</span>
+            clickCounts[type] = <span class="num">0</span>; <span class="comment">// Reset counter</span>
+            clearTimeout(clickTimers[type]);
+            chrome.runtime.<span class="fn">sendMessage</span>({ action: <span class="str">'ADD_EVENT'</span>, type });
+
+            } <span class="kw">else</span> {
+            <span class="comment">// First click — start a timer. If no 2nd click arrives in time → reset</span>
+            clickTimers[type] = <span class="fn">setTimeout</span>(() => {
+            clickCounts[type] = <span class="num">0</span>; <span class="comment">// ❌ Timed out — single click, ignore
+                it</span>
+            }, DOUBLE_CLICK_DELAY);
+            }
+            }
+        </div>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ 12. FULL JOURNEY ═══ -->
+    <div class="page" id="flow">
+        <h2 class="section-title">12. The Full Journey of One Double-Click</h2>
+        <p>Here's exactly what happens from the moment you double-click 🔴 to the moment the data is saved:</p>
+
+        <div class="flow">
+            <div class="flow-step">
+                <div class="flow-num">1</div>
+                <div class="flow-body">
+                    <strong>User double-clicks 🔴 Red button on Zendesk</strong>
+                    <span>content.js detects 2 clicks within 350ms → confirmed double-click</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">2</div>
+                <div class="flow-body">
+                    <strong>Pulse animation fires (widget.css)</strong>
+                    <span>JS adds class <code>ztk-pulsing</code> to the button. CSS keyframe animation runs. A +1 label
+                        floats upward.</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">3</div>
+                <div class="flow-body">
+                    <strong>Message sent to background.js</strong>
+                    <span><code>chrome.runtime.sendMessage({ action: 'ADD_EVENT', type: 'open' })</code></span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">4</div>
+                <div class="flow-body">
+                    <strong>background.js receives message</strong>
+                    <span>Runs <code>addEvent('open')</code>. Gets current time. Builds dateKey like
+                        <code>"2026-02-28"</code>.</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">5</div>
+                <div class="flow-body">
+                    <strong>Data is written to chrome.storage.local</strong>
+                    <span>Pushes new event to <code>events[]</code>. Increments
+                        <code>dailyTotals["2026-02-28"].open</code> by 1.</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">6</div>
+                <div class="flow-body">
+                    <strong>Later: user clicks the TT icon → popup opens</strong>
+                    <span>Chrome loads popup.html. popup.js immediately sends <code>GET_STATS</code> to
+                        background.js.</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">7</div>
+                <div class="flow-body">
+                    <strong>background.js calculates stats and replies</strong>
+                    <span>Reads <code>dailyTotals</code> from storage. Sums up today / last 7 days / this month. Returns
+                        all of it.</span>
+                </div>
+            </div>
+            <div class="flow-step">
+                <div class="flow-num">8</div>
+                <div class="flow-body">
+                    <strong>popup.js renders the dashboard</strong>
+                    <span>Updates number cards. Calls <code>new Chart()</code> using chart.min.js. Bar chart appears on
+                        screen. Done! ✅</span>
+                </div>
+            </div>
+        </div>
+
+        <div
+            style="background:linear-gradient(135deg,#1a1d35,#6c63ff);border-radius:14px;padding:28px;color:#fff;text-align:center;margin-top:30px">
+            <div style="font-size:36px;margin-bottom:10px">🎉</div>
+            <h3 style="font-size:20px;margin-bottom:8px">You now understand your Chrome Extension!</h3>
+            <p style="opacity:.8;font-size:14px;max-width:480px;margin:0 auto">Every file has one job. They talk through
+                messages. Data is saved permanently in Chrome's storage. The chart is drawn from that stored data.
+                That's it — the full picture.</p>
+        </div>
+    </div>
+
+</body>
+
+</html>

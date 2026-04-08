@@ -1,0 +1,12 @@
+# System files
+desktop.ini
+Thumbs.db
+.DS_Store
+
+# Import/export data files
+tickets-*.csv
+tickets-*.json
+import-data.js
+
+# IDE
+.vscode/

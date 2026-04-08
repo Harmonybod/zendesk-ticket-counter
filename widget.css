@@ -1,0 +1,625 @@
+/* ─────────────────────────────────────────────────────────────────────────
+   Zendesk Ticket Tracker — Floating Widget Styles
+   ───────────────────────────────────────────────────────────────────────── */
+
+/* ── Widget Container ───────────────────────────────────────────────────── */
+#ztk-widget {
+  position: fixed;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2147483647;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 8px;
+  background: rgba(15, 18, 35, 0.90);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  box-shadow:
+    0 6px 24px rgba(0, 0, 0, 0.55),
+    0 0 0 1px rgba(255, 255, 255, 0.04) inset;
+  user-select: none;
+  cursor: grab;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  transition: box-shadow 0.3s ease;
+  min-width: 44px;
+  width: 52px;
+}
+
+#ztk-widget:active {
+  cursor: grabbing;
+}
+
+#ztk-widget:hover {
+  box-shadow:
+    0 12px 48px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255, 255, 255, 0.08) inset;
+}
+
+/* ── Header / Logo ──────────────────────────────────────────────────────── */
+#ztk-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+
+#ztk-logo {
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #6c63ff, #3ecfcf);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 9px;
+  font-weight: 800;
+  color: #fff;
+  letter-spacing: -0.5px;
+}
+
+#ztk-title {
+  display: none;
+}
+
+/* ── Divider ────────────────────────────────────────────────────────────── */
+.ztk-divider {
+  width: 100%;
+  height: 1px;
+  background: rgba(255, 255, 255, 0.07);
+  margin: 1px 0;
+}
+
+/* ── Buttons ────────────────────────────────────────────────────────────── */
+.ztk-btn-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  position: relative;
+}
+
+.ztk-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0;
+  transition:
+    transform 0.15s cubic-bezier(.34, 1.56, .64, 1),
+    box-shadow 0.2s ease,
+    filter 0.2s ease;
+  position: relative;
+  outline: none;
+}
+
+.ztk-btn:hover {
+  transform: scale(1.12);
+}
+
+.ztk-btn:active {
+  transform: scale(0.94);
+}
+
+/* Red — Open */
+.ztk-btn-red {
+  background: radial-gradient(circle at 35% 35%, #ff6b6b, #c0392b);
+  box-shadow:
+    0 4px 16px rgba(192, 57, 43, 0.45),
+    0 0 0 3px rgba(255, 107, 107, 0.12);
+}
+
+.ztk-btn-red:hover {
+  box-shadow:
+    0 6px 24px rgba(192, 57, 43, 0.65),
+    0 0 0 4px rgba(255, 107, 107, 0.22);
+  filter: brightness(1.1);
+}
+
+/* Yellow — New */
+.ztk-btn-yellow {
+  background: radial-gradient(circle at 35% 35%, #ffd93d, #f39c12);
+  box-shadow:
+    0 4px 16px rgba(243, 156, 18, 0.45),
+    0 0 0 3px rgba(255, 217, 61, 0.12);
+}
+
+.ztk-btn-yellow:hover {
+  box-shadow:
+    0 6px 24px rgba(243, 156, 18, 0.65),
+    0 0 0 4px rgba(255, 217, 61, 0.22);
+  filter: brightness(1.1);
+}
+
+/* Blue — Team */
+.ztk-btn-blue {
+  background: radial-gradient(circle at 35% 35%, #74b9ff, #2980b9);
+  box-shadow:
+    0 4px 16px rgba(41, 128, 185, 0.45),
+    0 0 0 3px rgba(116, 185, 255, 0.12);
+}
+
+.ztk-btn-blue:hover {
+  box-shadow:
+    0 6px 24px rgba(41, 128, 185, 0.65),
+    0 0 0 4px rgba(116, 185, 255, 0.22);
+  filter: brightness(1.1);
+}
+
+/* Green — Compliance */
+.ztk-btn-green {
+  background: radial-gradient(circle at 35% 35%, #2ecc71, #27ae60);
+  box-shadow:
+    0 4px 16px rgba(39, 174, 96, 0.45),
+    0 0 0 3px rgba(46, 204, 113, 0.12);
+}
+
+.ztk-btn-green:hover {
+  box-shadow:
+    0 6px 24px rgba(39, 174, 96, 0.65),
+    0 0 0 4px rgba(46, 204, 113, 0.22);
+  filter: brightness(1.1);
+}
+
+/* Brown — Escalation */
+.ztk-btn-brown {
+  background: radial-gradient(circle at 35% 35%, #b5723e, #8B5E3C);
+  box-shadow:
+    0 4px 16px rgba(139, 94, 60, 0.45),
+    0 0 0 3px rgba(181, 114, 62, 0.12);
+}
+
+.ztk-btn-brown:hover {
+  box-shadow:
+    0 6px 24px rgba(139, 94, 60, 0.65),
+    0 0 0 4px rgba(181, 114, 62, 0.22);
+  filter: brightness(1.1);
+}
+
+/* Gray — Closed */
+.ztk-btn-gray {
+  background: radial-gradient(circle at 35% 35%, #95a5a6, #7f8c8d);
+  box-shadow:
+    0 4px 16px rgba(127, 140, 141, 0.45),
+    0 0 0 3px rgba(149, 165, 166, 0.12);
+}
+
+.ztk-btn-gray:hover {
+  box-shadow:
+    0 6px 24px rgba(127, 140, 141, 0.65),
+    0 0 0 4px rgba(149, 165, 166, 0.22);
+  filter: brightness(1.1);
+}
+
+/* ── Button Labels ──────────────────────────────────────────────────────── */
+.ztk-btn-label {
+  display: none;
+}
+
+/* ── Count Badges — hidden on widget, only shown in popup ── */
+.ztk-count {
+  position: absolute;
+  top: -3px;
+  right: -5px;
+  min-width: 15px;
+  height: 15px;
+  border-radius: 8px;
+  background: rgba(15, 18, 35, 0.95);
+  border: 1.5px solid rgba(255, 255, 255, 0.15);
+  font-size: 9px;
+  font-weight: 700;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  pointer-events: none;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+  transition: transform 0.2s ease;
+}
+
+/* ── Pulse Animations ───────────────────────────────────────────────────── */
+@keyframes ztk-pulse-red {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7), 0 0 0 3px rgba(255, 107, 107, 0.12);
+  }
+
+  60% {
+    box-shadow: 0 0 0 14px rgba(255, 107, 107, 0), 0 0 0 3px rgba(255, 107, 107, 0.12);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 107, 0), 0 0 0 3px rgba(255, 107, 107, 0.12);
+  }
+}
+
+@keyframes ztk-pulse-yellow {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 217, 61, 0.7), 0 0 0 3px rgba(255, 217, 61, 0.12);
+  }
+
+  60% {
+    box-shadow: 0 0 0 14px rgba(255, 217, 61, 0), 0 0 0 3px rgba(255, 217, 61, 0.12);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 217, 61, 0), 0 0 0 3px rgba(255, 217, 61, 0.12);
+  }
+}
+
+@keyframes ztk-pulse-blue {
+  0% {
+    box-shadow: 0 0 0 0 rgba(116, 185, 255, 0.7), 0 0 0 3px rgba(116, 185, 255, 0.12);
+  }
+
+  60% {
+    box-shadow: 0 0 0 14px rgba(116, 185, 255, 0), 0 0 0 3px rgba(116, 185, 255, 0.12);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(116, 185, 255, 0), 0 0 0 3px rgba(116, 185, 255, 0.12);
+  }
+}
+
+@keyframes ztk-pulse-green {
+  0% {
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0.7), 0 0 0 3px rgba(46, 204, 113, 0.12);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(46, 204, 113, 0), 0 0 0 3px rgba(46, 204, 113, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(46, 204, 113, 0), 0 0 0 3px rgba(46, 204, 113, 0.12);
+  }
+}
+
+@keyframes ztk-pulse-brown {
+  0% {
+    box-shadow: 0 0 0 0 rgba(181, 114, 62, 0.7), 0 0 0 3px rgba(181, 114, 62, 0.12);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(181, 114, 62, 0), 0 0 0 3px rgba(181, 114, 62, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(181, 114, 62, 0), 0 0 0 3px rgba(181, 114, 62, 0.12);
+  }
+}
+
+@keyframes ztk-pulse-gray {
+  0% {
+    box-shadow: 0 0 0 0 rgba(149, 165, 166, 0.7), 0 0 0 3px rgba(149, 165, 166, 0.12);
+  }
+  60% {
+    box-shadow: 0 0 0 14px rgba(149, 165, 166, 0), 0 0 0 3px rgba(149, 165, 166, 0.12);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(149, 165, 166, 0), 0 0 0 3px rgba(149, 165, 166, 0.12);
+  }
+}
+
+.ztk-btn-red.ztk-pulsing {
+  animation: ztk-pulse-red 0.5s ease-out;
+}
+
+.ztk-btn-yellow.ztk-pulsing {
+  animation: ztk-pulse-yellow 0.5s ease-out;
+}
+
+.ztk-btn-blue.ztk-pulsing {
+  animation: ztk-pulse-blue 0.5s ease-out;
+}
+
+.ztk-btn-green.ztk-pulsing {
+  animation: ztk-pulse-green 0.5s ease-out;
+}
+
+.ztk-btn-brown.ztk-pulsing {
+  animation: ztk-pulse-brown 0.5s ease-out;
+}
+
+.ztk-btn-gray.ztk-pulsing {
+  animation: ztk-pulse-gray 0.5s ease-out;
+}
+
+/* ── Floating +1 Label ──────────────────────────────────────────────────── */
+.ztk-float-label {
+  position: fixed;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 14px;
+  font-weight: 800;
+  pointer-events: none;
+  z-index: 2147483647;
+  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  animation: ztk-float-up 0.75s ease-out forwards;
+}
+
+.ztk-float-red {
+  color: #ff6b6b;
+}
+
+.ztk-float-yellow {
+  color: #ffd93d;
+}
+
+.ztk-float-blue {
+  color: #74b9ff;
+}
+
+.ztk-float-green {
+  color: #2ecc71;
+}
+
+.ztk-float-brown {
+  color: #b5723e;
+}
+
+.ztk-float-gray {
+  color: #95a5a6;
+}
+
+@keyframes ztk-float-up {
+  0% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+
+  40% {
+    opacity: 1;
+    transform: translateY(-20px) scale(1.15);
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateY(-40px) scale(0.8);
+  }
+}
+
+/* ── Warning Toast ──────────────────────────────────────────────────────── */
+#ztk-warning-toast {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) translateY(10px);
+  background: rgba(231, 76, 60, 0.95);
+  border: 1px solid rgba(255, 107, 107, 0.4);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  opacity: 0;
+  transition: all 0.3s cubic-bezier(.34, 1.56, .64, 1);
+  z-index: 2147483647;
+}
+
+#ztk-warning-toast.ztk-show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+
+/* ── Daily Total Banner — hidden on widget ─── */
+#ztk-daily-total {
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.4);
+  letter-spacing: 0.3px;
+  margin-top: 0;
+  text-align: center;
+  line-height: 1.2;
+}
+
+#ztk-daily-total span {
+  color: #fff;
+  font-size: 11px;
+  display: block;
+}
+
+/* ── Logo double-click minimize hint ────────── */
+#ztk-logo {
+  cursor: pointer;
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+#ztk-logo:hover {
+  opacity: 0.8;
+  transform: scale(0.93);
+}
+
+/* ── Collapsed state ─────────────────────────── */
+#ztk-widget.ztk-collapsed .ztk-btn-wrap,
+#ztk-widget.ztk-collapsed .ztk-divider:not(:first-of-type) {
+  display: none;
+}
+
+#ztk-widget.ztk-collapsed {
+  padding: 8px;
+  gap: 0;
+}
+
+/* Subtle pulsing ring on logo when collapsed to hint it's expandable */
+@keyframes ztk-logo-hint {
+  0% {
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.5);
+  }
+
+  70% {
+    box-shadow: 0 0 0 6px rgba(108, 99, 255, 0);
+  }
+
+  100% {
+    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0);
+  }
+}
+
+#ztk-widget.ztk-collapsed #ztk-logo {
+  animation: ztk-logo-hint 2s ease-out infinite;
+  border-radius: 6px;
+}
+
+/* ── Tooltip ────────────────────────────────────────────────────────────── */
+.ztk-btn-wrap[data-tip]:hover::after {
+  content: attr(data-tip);
+  position: absolute;
+  right: calc(100% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  background: rgba(15, 18, 35, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 500;
+  padding: 5px 10px;
+  border-radius: 8px;
+  white-space: nowrap;
+  pointer-events: none;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ── Hidden Counts Toggle ───────────────────────────────────────────────── */
+.ztk-counts-hidden .ztk-count {
+  display: none !important;
+}
+
+.ztk-counts-hidden #ztk-daily-total {
+  display: none !important;
+}
+
+/* ── Telegram Note Button & Input ───────────────────────────────────────── */
+
+/* Purple/Telegram Blue - Send Note Button */
+.ztk-btn-note {
+  background: radial-gradient(circle at 35% 35%, #9b59b6, #8e44ad);
+  box-shadow: 
+    0 4px 16px rgba(142, 68, 173, 0.45), 
+    0 0 0 3px rgba(155, 89, 182, 0.12);
+  margin-top: 4px;
+}
+
+.ztk-btn-note:hover {
+  box-shadow: 
+    0 6px 24px rgba(142, 68, 173, 0.65), 
+    0 0 0 4px rgba(155, 89, 182, 0.22);
+  filter: brightness(1.1);
+}
+
+.ztk-btn-note svg {
+  width: 16px;
+  height: 16px;
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* Expandable Note Input Container */
+#ztk-note-container {
+  position: absolute;
+  right: calc(100% + 12px);
+  top: 50%;
+  transform: translateY(-50%) scale(0.95);
+  transform-origin: right center;
+  background: rgba(15, 18, 35, 0.95);
+  border: 1px solid rgba(155, 89, 182, 0.4);
+  border-radius: 12px;
+  padding: 8px;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
+  opacity: 0;
+  pointer-events: none;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  width: 260px;
+}
+
+#ztk-note-container.ztk-show {
+  opacity: 1;
+  pointer-events: auto;
+  transform: translateY(-50%) scale(1);
+}
+
+#ztk-note-input {
+  flex: 1;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  color: #fff;
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  outline: none;
+  resize: none;
+  height: 36px;
+  line-height: 1.4;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+
+#ztk-note-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+#ztk-note-input:focus {
+  border-color: #9b59b6;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+#ztk-note-send {
+  background: linear-gradient(135deg, #9b59b6, #8e44ad);
+  border: none;
+  border-radius: 8px;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: all 0.2s;
+}
+
+#ztk-note-send svg {
+  width: 16px;
+  height: 16px;
+  fill: #fff;
+}
+
+#ztk-note-send:hover {
+  transform: scale(1.05);
+  box-shadow: 0 4px 12px rgba(155, 89, 182, 0.4);
+}
+
+#ztk-note-send:active {
+  transform: scale(0.95);
+}
+
+#ztk-note-send.ztk-loading {
+  opacity: 0.7;
+  pointer-events: none;
+}
+
+#ztk-note-send.ztk-loading svg {
+  animation: ztk-spin 1s infinite linear;
+}
+
+@keyframes ztk-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+#ztk-widget.ztk-collapsed .ztk-btn-wrap.ztk-note-wrap {
+  display: none;
+}
