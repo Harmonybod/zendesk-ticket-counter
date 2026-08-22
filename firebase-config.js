@@ -14,6 +14,164 @@ const FIREBASE_CONFIG = {
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`;
 
+// ── Auth Constants ────────────────────────────
+
+const AUTH_SESSION_KEY = 'authSession';
+const TOKEN_REFRESH_BUFFER = 5 * 60 * 1000; // refresh 5 min before expiry
+
+// ── Google OAuth → Firebase Auth ──────────────
+
+/**
+ * Get a Google OAuth access token via chrome.identity.
+ * @param {boolean} interactive - If true, shows the Google sign-in popup.
+ * @returns {string} Google OAuth access token
+ */
+async function getGoogleAuthToken(interactive = true) {
+  return new Promise((resolve, reject) => {
+    chrome.identity.getAuthToken({ interactive }, (token) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+        return;
+      }
+      if (!token) {
+        reject(new Error('No auth token returned'));
+        return;
+      }
+      resolve(token);
+    });
+  });
+}
+
+/**
+ * Exchange a Google OAuth access token for a Firebase ID token + user info.
+ * Uses the Identity Toolkit REST API (signInWithIdp).
+ * @param {string} googleAccessToken
+ * @returns {{ idToken: string, uid: string, email: string, displayName: string, photoUrl: string, expiresAt: number }}
+ */
+async function exchangeForFirebaseIdToken(googleAccessToken) {
+  const url = `https://identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=${FIREBASE_CONFIG.apiKey}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      postBody: `access_token=${googleAccessToken}&providerId=google.com`,
+      requestUri: 'http://localhost',
+      returnSecureToken: true,
+      returnIdpCredential: true
+    })
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Firebase token exchange failed (${response.status}): ${errorText}`);
+  }
+
+  const data = await response.json();
+
+  // Firebase ID tokens are valid for 1 hour
+  const expiresAt = Date.now() + (parseInt(data.expiresIn || '3600', 10) * 1000);
+
+  return {
+    idToken: data.idToken,
+    uid: data.localId,
+    email: data.email || '',
+    displayName: data.displayName || data.email || '',
+    photoUrl: data.photoUrl || '',
+    expiresAt
+  };
+}
+
+/**
+ * Get or restore a valid Firebase session.
+ * Returns cached session if still valid; otherwise refreshes silently.
+ * @param {boolean} interactive - If true, will prompt user to sign in if no session exists.
+ * @returns {{ idToken: string, uid: string, email: string, displayName: string, photoUrl: string, expiresAt: number } | null}
+ */
+async function getFirebaseSession(interactive = false) {
+  // 1. Try to restore from chrome.storage.local
+  const stored = await new Promise((resolve) => {
+    chrome.storage.local.get([AUTH_SESSION_KEY], (result) => {
+      resolve(result[AUTH_SESSION_KEY] || null);
+    });
+  });
+
+  // 2. If we have a valid (non-expired) cached session, return it
+  if (stored && stored.idToken && stored.expiresAt > (Date.now() + TOKEN_REFRESH_BUFFER)) {
+    return stored;
+  }
+
+  // 3. Try to refresh silently (or interactively if requested)
+  try {
+    const googleToken = await getGoogleAuthToken(interactive);
+    const session = await exchangeForFirebaseIdToken(googleToken);
+
+    // Cache the session
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ [AUTH_SESSION_KEY]: session }, resolve);
+    });
+
+    return session;
+  } catch (e) {
+    console.log('[ZTK Auth] Could not obtain Firebase session:', e.message);
+    return null;
+  }
+}
+
+/**
+ * Sign out: revoke the cached Google token and clear the stored session.
+ */
+async function signOut() {
+  // 1. Remove the cached Google OAuth token
+  try {
+    const token = await new Promise((resolve) => {
+      chrome.identity.getAuthToken({ interactive: false }, (t) => {
+        if (chrome.runtime.lastError || !t) resolve(null);
+        else resolve(t);
+      });
+    });
+    if (token) {
+      await new Promise((resolve) => {
+        chrome.identity.removeCachedAuthToken({ token }, resolve);
+      });
+      // Also revoke on Google's end
+      try { await fetch(`https://accounts.google.com/o/oauth2/revoke?token=${token}`); } catch (_) {}
+    }
+  } catch (e) {
+    console.warn('[ZTK Auth] Error clearing Google token:', e.message);
+  }
+
+  // 2. Clear the stored Firebase session
+  await new Promise((resolve) => {
+    chrome.storage.local.remove([AUTH_SESSION_KEY], resolve);
+  });
+
+  console.log('[ZTK Auth] Signed out');
+}
+
+/**
+ * Get the current user's profile from the cached session.
+ * @returns {{ uid: string, email: string, displayName: string, photoUrl: string } | null}
+ */
+async function getUserProfile() {
+  const stored = await new Promise((resolve) => {
+    chrome.storage.local.get([AUTH_SESSION_KEY], (result) => {
+      resolve(result[AUTH_SESSION_KEY] || null);
+    });
+  });
+
+  if (!stored || !stored.uid) return null;
+
+  return {
+    uid: stored.uid,
+    email: stored.email,
+    displayName: stored.displayName,
+    photoUrl: stored.photoUrl
+  };
+}
+
+// ── Firestore Document Helpers ────────────────
+
 /**
  * Convert a JS object of dailyTotals into Firestore REST document format.
  * Input:  { "2026-03-13": { open: 5, new: 3, team: 2 } }
@@ -92,19 +250,29 @@ function mergeTicketLogs(local, remote) {
   return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
+// ── Firestore Read/Write (authenticated) ──────
+
 /**
- * Write a document to Firestore (create or overwrite).
- * @param {string} syncId - The sync identifier (used as document ID)
+ * Write a document to Firestore using Firebase ID token auth.
+ * Path: /users/{uid}/data/tracker
+ * @param {string} uid - The user's Firebase UID
  * @param {object} dailyTotals - The daily totals data
+ * @param {object} ticketLog - The ticket log array
  * @param {object} settings - Agent name, theme, counting toggle
+ * @param {string} idToken - Firebase ID token for auth
  */
-async function firestoreWrite(syncId, dailyTotals, ticketLog, settings) {
-  const url = `${FIRESTORE_BASE}/sync/${encodeURIComponent(syncId)}?key=${FIREBASE_CONFIG.apiKey}`;
+async function firestoreWrite(uid, dailyTotals, ticketLog, settings, idToken) {
+  const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/data/tracker`;
   const body = toFirestoreDoc(dailyTotals, ticketLog, settings);
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
 
   const response = await fetch(url, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(body)
   });
 
@@ -117,16 +285,23 @@ async function firestoreWrite(syncId, dailyTotals, ticketLog, settings) {
 }
 
 /**
- * Read a document from Firestore.
- * @param {string} syncId - The sync identifier (used as document ID)
+ * Read a document from Firestore using Firebase ID token auth.
+ * Path: /users/{uid}/data/tracker
+ * @param {string} uid - The user's Firebase UID
+ * @param {string} idToken - Firebase ID token for auth
  * @returns {object|null} Parsed data or null if not found
  */
-async function firestoreRead(syncId) {
-  const url = `${FIRESTORE_BASE}/sync/${encodeURIComponent(syncId)}?key=${FIREBASE_CONFIG.apiKey}`;
+async function firestoreRead(uid, idToken) {
+  const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/data/tracker`;
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) {
+    headers['Authorization'] = `Bearer ${idToken}`;
+  }
 
   const response = await fetch(url, {
     method: 'GET',
-    headers: { 'Content-Type': 'application/json' }
+    headers
   });
 
   if (response.status === 404) {

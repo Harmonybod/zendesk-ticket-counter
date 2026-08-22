@@ -1,6 +1,7 @@
 // ─────────────────────────────────────────────
 // Zendesk Ticket Tracker — Popup JS
 // Dashboard logic, settings, custom calendar picker, chart rendering
+// Google Auth integration
 // ─────────────────────────────────────────────
 
 'use strict';
@@ -51,6 +52,82 @@ function fmtShortDateStr(dateStr) {
     return `${parseInt(m)}/${parseInt(d)}`;
 }
 
+// ── Auth Flow ─────────────────────────────────
+
+function showAuthScreen() {
+    $('auth-screen').classList.add('visible');
+    $('app-main').classList.remove('visible');
+}
+
+function showAppMain() {
+    $('auth-screen').classList.remove('visible');
+    $('app-main').classList.add('visible');
+}
+
+function checkAuthAndInit() {
+    chrome.runtime.sendMessage({ action: 'GET_AUTH_STATE' }, (response) => {
+        if (chrome.runtime.lastError || !response) {
+            showAuthScreen();
+            return;
+        }
+
+        if (response.isSignedIn && response.user) {
+            showAppMain();
+            loadStats(() => {
+                updateChartTitle();
+                renderStats();
+                renderChart();
+            });
+        } else {
+            showAuthScreen();
+        }
+    });
+}
+
+// Sign in button
+$('google-signin-btn').addEventListener('click', () => {
+    const btn = $('google-signin-btn');
+    const errEl = $('auth-error');
+    errEl.textContent = '';
+    btn.disabled = true;
+    btn.textContent = 'Signing in…';
+
+    chrome.runtime.sendMessage({ action: 'SIGN_IN' }, (response) => {
+        btn.disabled = false;
+        btn.innerHTML = '<img src="icons/google.svg" alt="" width="20" height="20" /> Sign in with Google';
+
+        if (chrome.runtime.lastError) {
+            errEl.textContent = 'Connection error. Try again.';
+            return;
+        }
+
+        if (response && response.success) {
+            showAppMain();
+            loadStats(() => {
+                updateChartTitle();
+                renderStats();
+                renderChart();
+            });
+        } else {
+            errEl.textContent = response?.error || 'Sign-in failed. Try again.';
+        }
+    });
+});
+
+// Sign out button
+$('sign-out-btn').addEventListener('click', () => {
+    chrome.runtime.sendMessage({ action: 'SIGN_OUT' }, (response) => {
+        if (chrome.runtime.lastError) return;
+        if (response && response.success) {
+            showAuthScreen();
+            showToast('Signed out');
+            // Close settings panel if open
+            $('settings-panel').classList.remove('open');
+            $('settings-btn').classList.remove('active');
+        }
+    });
+});
+
 // ── Load stats from background ────────────────
 function loadStats(callback) {
     if (!customRangeParams) {
@@ -98,8 +175,19 @@ function applySettingsUI() {
     if (stats.agentName) $('agent-name').textContent = stats.agentName;
     $('agent-name-input').value = stats.agentName || '';
     $('counting-toggle').setAttribute('aria-checked', stats.countingEnabled !== false ? 'true' : 'false');
-    $('sync-id-input').value = stats.syncId || '';
-    $('sync-status').textContent = stats.syncId ? '☁️ Cloud sync active' : 'No Sync ID set';
+
+    // User profile from auth
+    if (stats.user) {
+        $('user-display-name').textContent = stats.user.displayName || stats.user.email || 'User';
+        $('user-email').textContent = stats.user.email || '';
+        $('sync-status').textContent = '☁️ Synced to Google account';
+    } else {
+        $('user-display-name').textContent = 'Not signed in';
+        $('user-email').textContent = '';
+        $('sync-status').textContent = 'Not connected';
+    }
+
+    // Telegram
     $('tg-token-input').value = stats.tgToken || '';
     $('tg-chat-id-input').value = stats.tgChatId || '';
     $('tg-status').textContent = (stats.tgToken && stats.tgChatId) ? '✓ Telegram connected' : '';
@@ -156,27 +244,7 @@ $('save-tg-btn').addEventListener('click', () => {
 $('tg-token-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-tg-btn').click(); });
 $('tg-chat-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-tg-btn').click(); });
 
-// ── Cloud Sync ID ─────────────────────────────
-$('save-sync-id').addEventListener('click', () => {
-    const syncId = $('sync-id-input').value.trim();
-    chrome.runtime.sendMessage({ action: 'SET_SYNC_ID', syncId }, (response) => {
-        if (response && response.success) {
-            stats.syncId = syncId;
-            $('sync-status').textContent = syncId ? '☁️ Sync ID saved — syncing…' : 'Sync ID cleared';
-            showToast('✓ Sync ID saved');
-            // Reload stats to show merged data
-            setTimeout(() => {
-                loadStats(() => {
-                    renderStats();
-                    renderChart();
-                    $('sync-status').textContent = syncId ? '☁️ Cloud sync active' : 'No Sync ID set';
-                });
-            }, 1500);
-        }
-    });
-});
-$('sync-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-sync-id').click(); });
-
+// ── Force Sync ────────────────────────────────
 $('force-sync-btn').addEventListener('click', () => {
     $('sync-status').textContent = '🔄 Syncing…';
     chrome.runtime.sendMessage({ action: 'FORCE_SYNC' }, (response) => {
@@ -188,8 +256,9 @@ $('force-sync-btn').addEventListener('click', () => {
         showToast('✓ Synced with cloud');
         loadStats(() => {
             renderStats();
+            renderLastTicket();
             renderChart();
-            $('sync-status').textContent = '☁️ Cloud sync active';
+            $('sync-status').textContent = '☁️ Synced to Google account';
         });
     });
 });
@@ -221,6 +290,45 @@ function renderStats() {
     const at = stats.allTime;
     $('alltime-total').textContent = at.total ?? 0;
     $('alltime-sub').textContent = `Open: ${at.open ?? 0} · New: ${at.new ?? 0} · Team: ${at.team ?? 0} · Cmpl: ${at.compliance ?? 0} · Esc: ${at.escalation ?? 0} · Closed: ${at.closed ?? 0}`;
+
+    renderLastTicket();
+}
+
+// ── Render last handled ticket ────────────────────────────────────────────
+const TYPE_LABELS_FULL = {
+    open: 'Open', new: 'New', team: 'Team',
+    compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed'
+};
+
+function relativeTime(ts) {
+    if (!ts) return '';
+    const diff = Math.floor((Date.now() - ts) / 1000);
+    if (diff < 60)   return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+}
+
+function renderLastTicket() {
+    const last = stats && stats.lastEvent;
+    const dotEl  = $('last-ticket-dot');
+    const numEl  = $('last-ticket-num');
+    const typeEl = $('last-ticket-type');
+    const timeEl = $('last-ticket-time');
+    if (!dotEl || !numEl || !typeEl || !timeEl) return;
+
+    if (!last) {
+        dotEl.className = 'last-ticket-dot';
+        numEl.textContent = '—';
+        typeEl.textContent = 'No tickets yet';
+        timeEl.textContent = '';
+        return;
+    }
+
+    dotEl.className = `last-ticket-dot type-${last.type}`;
+    numEl.textContent = last.ticketNumber ? `#${last.ticketNumber}` : '—';
+    typeEl.textContent = TYPE_LABELS_FULL[last.type] || last.type;
+    timeEl.textContent = relativeTime(last.timestamp);
 }
 
 // ── Build chart dataset ───────────────────────
@@ -500,8 +608,9 @@ function renderCalendar() {
         }
     }
 
-    // 6 rows of 7 days
-    for (let r = 0; r < 6; r++) {
+    // Render rows until all days of the current month are shown
+    let doneWithMonth = false;
+    for (let r = 0; r < 7 && !doneWithMonth; r++) {
         const rowWrap = document.createElement('div');
         if (currentRange === 'week') {
             rowWrap.className = 'picker-row-span';
@@ -546,6 +655,9 @@ function renderCalendar() {
             current.setDate(current.getDate() + 1);
         }
         cal.appendChild(rowWrap);
+
+        // Stop after we've gone past the last day of the month
+        if (current.getMonth() !== month) doneWithMonth = true;
     }
 }
 
@@ -557,7 +669,7 @@ $('undo-btn').addEventListener('click', () => {
         if (response.success) {
             const labels = { open: '🔴 Open', new: '🟡 New', team: '🔵 Team', compliance: '🟢 Compliance', escalation: '🟤 Escalation', closed: '⚪ Closed' };
             showToast(`↩ Undone: ${labels[response.undoneType] || 'ticket'}`);
-            loadStats(() => { renderStats(); renderChart(); });
+            loadStats(() => { renderStats(); renderChart(); renderLastTicket(); });
         } else {
             showToast(response.message || 'Nothing to undo');
         }
@@ -835,8 +947,4 @@ $('detail-date-input').addEventListener('change', (e) => {
 });
 
 // ── Init ──────────────────────────────────────
-loadStats(() => {
-    updateChartTitle();
-    renderStats();
-    renderChart();
-});
+checkAuthAndInit();

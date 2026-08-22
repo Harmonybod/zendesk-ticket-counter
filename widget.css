@@ -334,12 +334,15 @@
 .ztk-float-label {
   position: fixed;
   font-family: 'Segoe UI', system-ui, sans-serif;
-  font-size: 14px;
-  font-weight: 800;
+  font-size: 28px;
+  font-weight: 900;
   pointer-events: none;
   z-index: 2147483647;
-  text-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
-  animation: ztk-float-up 0.75s ease-out forwards;
+  text-shadow:
+    0 0 20px currentColor,
+    0 3px 12px rgba(0, 0, 0, 0.6);
+  animation: ztk-float-up 0.9s ease-out forwards;
+  letter-spacing: -1px;
 }
 
 .ztk-float-red {
@@ -369,17 +372,22 @@
 @keyframes ztk-float-up {
   0% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0) scale(0.8);
   }
 
-  40% {
+  25% {
     opacity: 1;
-    transform: translateY(-20px) scale(1.15);
+    transform: translateY(-16px) scale(1.25);
+  }
+
+  60% {
+    opacity: 1;
+    transform: translateY(-36px) scale(1.1);
   }
 
   100% {
     opacity: 0;
-    transform: translateY(-40px) scale(0.8);
+    transform: translateY(-60px) scale(0.7);
   }
 }
 
@@ -437,35 +445,83 @@
   transform: scale(0.93);
 }
 
-/* ── Collapsed state ─────────────────────────── */
-#ztk-widget.ztk-collapsed .ztk-btn-wrap,
-#ztk-widget.ztk-collapsed .ztk-divider:not(:first-of-type) {
-  display: none;
+/* ── Horizontal mode ─────────────────────────────────────────────────────── */
+/* Toggled by double-clicking the TT logo. Switches the widget from a
+   vertical column to a horizontal row so buttons sit side-by-side.
+   Position is NOT overridden — the widget stays exactly where it was,
+   keeping the same solid glass background, border, and shadow.           */
+
+#ztk-widget.ztk-horizontal {
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 10px;
+  width: auto;
+  min-width: unset;
+  border-radius: 36px;
+  /* background / border / shadow / position intentionally NOT changed —
+     keeps the same solid appearance as vertical mode                    */
 }
 
-#ztk-widget.ztk-collapsed {
-  padding: 8px;
+/* Header becomes a compact left-side badge */
+#ztk-widget.ztk-horizontal #ztk-header {
+  flex-direction: row;
   gap: 0;
+  margin-bottom: 0;
+  margin-right: 4px;
 }
 
-/* Subtle pulsing ring on logo when collapsed to hint it's expandable */
+/* Buttons arrange in a row */
+#ztk-widget.ztk-horizontal .ztk-btn-wrap {
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+/* Show the short label under each button in horizontal mode */
+#ztk-widget.ztk-horizontal .ztk-btn-label {
+  display: block;
+  font-size: 8px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.5);
+  letter-spacing: 0.2px;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+/* Dividers become thin vertical bars in horizontal mode */
+#ztk-widget.ztk-horizontal .ztk-divider {
+  width: 1px;
+  height: 36px;
+  margin: 0 2px;
+}
+
+/* Daily total stays at end, shown horizontally */
+#ztk-widget.ztk-horizontal #ztk-daily-total {
+  margin-top: 0;
+  margin-left: 4px;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Tooltips in horizontal mode point upward */
+#ztk-widget.ztk-horizontal .ztk-btn-wrap[data-tip]:hover::after {
+  right: auto;
+  left: 50%;
+  top: auto;
+  bottom: calc(100% + 8px);
+  transform: translateX(-50%);
+}
+
+/* Pulsing hint on logo to show it's togglable */
 @keyframes ztk-logo-hint {
-  0% {
-    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.5);
-  }
-
-  70% {
-    box-shadow: 0 0 0 6px rgba(108, 99, 255, 0);
-  }
-
-  100% {
-    box-shadow: 0 0 0 0 rgba(108, 99, 255, 0);
-  }
+  0%   { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0.5); }
+  70%  { box-shadow: 0 0 0 6px rgba(108, 99, 255, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(108, 99, 255, 0); }
 }
 
-#ztk-widget.ztk-collapsed #ztk-logo {
+#ztk-widget.ztk-horizontal #ztk-logo {
   animation: ztk-logo-hint 2s ease-out infinite;
-  border-radius: 6px;
 }
 
 /* ── Tooltip ────────────────────────────────────────────────────────────── */
@@ -620,6 +676,4 @@
   to { transform: rotate(360deg); }
 }
 
-#ztk-widget.ztk-collapsed .ztk-btn-wrap.ztk-note-wrap {
-  display: none;
-}
+/* Note button is always visible in horizontal mode — no special hide rule needed */

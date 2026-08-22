@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────
 // Zendesk Ticket Tracker — Background Service Worker
 // Storage engine: append-only event log + precomputed daily totals
-// Cross-device sync via Firebase Firestore REST API
+// Cross-device sync via Firebase Firestore REST API (Google Auth)
 // ─────────────────────────────────────────────
 
 // Firebase helpers loaded via importScripts (manifest type changed to non-module)
@@ -32,7 +32,7 @@ let lastCloudSyncTime = 0;
 async function getLocal() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['events', 'dailyTotals', 'ticketLog', 'agentName', 'countingEnabled', 'theme', 'syncId', 'tgToken', 'tgChatId'],
+      ['events', 'dailyTotals', 'ticketLog', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId'],
       (result) => {
         if (chrome.runtime.lastError) {
           console.error('[ZTK] Failed to read local storage:', chrome.runtime.lastError.message);
@@ -43,7 +43,6 @@ async function getLocal() {
             agentName: '',
             countingEnabled: true,
             theme: 'dark',
-            syncId: '',
             tgToken: '',
             tgChatId: ''
           });
@@ -56,7 +55,6 @@ async function getLocal() {
           agentName: result.agentName ?? '',
           countingEnabled: result.countingEnabled !== false, // default true
           theme: result.theme ?? 'dark',
-          syncId: result.syncId ?? '',
           tgToken: result.tgToken ?? '',
           tgChatId: result.tgChatId ?? ''
         });
@@ -84,19 +82,21 @@ async function saveLocal(data) {
 // ── Cloud Sync: Push to Firestore ─────────────
 
 async function syncToCloud(dailyTotals, ticketLog, settings) {
-  const syncId = settings.syncId || (await getLocal()).syncId;
-  if (!syncId) {
-    console.log('[ZTK Cloud] No Sync ID set, skipping cloud sync');
-    return false;
-  }
   if (!isFirebaseConfigured()) {
     console.log('[ZTK Cloud] Firebase not configured, skipping cloud sync');
     return false;
   }
 
+  // Get current auth session
+  const session = await getFirebaseSession(false);
+  if (!session) {
+    console.log('[ZTK Cloud] No auth session, skipping cloud sync');
+    return false;
+  }
+
   try {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
-    await firestoreWrite(syncId, dailyTotals, ticketLog, settings);
+    await firestoreWrite(session.uid, dailyTotals, ticketLog, settings, session.idToken);
     console.log('[ZTK Cloud] ✓ Successfully synced to Firestore');
     return true;
   } catch (e) {
@@ -108,28 +108,31 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
 // ── Cloud Sync: Pull from Firestore ───────────
 
 async function pullFromCloud() {
-  const localData = await getLocal();
-  if (!localData.syncId) {
-    console.log('[ZTK Cloud] No Sync ID set, skipping cloud pull');
-    return null;
-  }
   if (!isFirebaseConfigured()) {
     console.log('[ZTK Cloud] Firebase not configured, skipping cloud pull');
     return null;
   }
 
+  // Get current auth session
+  const session = await getFirebaseSession(false);
+  if (!session) {
+    console.log('[ZTK Cloud] No auth session, skipping cloud pull');
+    return null;
+  }
+
+  const localData = await getLocal();
+
   try {
     console.log('[ZTK Cloud] Pulling data from Firestore…');
-    const remoteData = await firestoreRead(localData.syncId);
+    const remoteData = await firestoreRead(session.uid, session.idToken);
 
     if (!remoteData) {
-      console.log('[ZTK Cloud] No data found in Firestore for this Sync ID — uploading local data');
+      console.log('[ZTK Cloud] No data found in Firestore for this user — uploading local data');
       // First time: push local data to cloud
       await syncToCloud(localData.dailyTotals, localData.ticketLog, {
         agentName: localData.agentName,
         theme: localData.theme,
-        countingEnabled: localData.countingEnabled,
-        syncId: localData.syncId
+        countingEnabled: localData.countingEnabled
       });
       return localData.dailyTotals;
     }
@@ -154,8 +157,7 @@ async function pullFromCloud() {
       await syncToCloud(merged, mergedLog, {
         agentName: updates.agentName || localData.agentName,
         theme: localData.theme,
-        countingEnabled: localData.countingEnabled,
-        syncId: localData.syncId
+        countingEnabled: localData.countingEnabled
       });
     }
 
@@ -226,8 +228,7 @@ async function saveAll(data) {
       await syncToCloud(data.dailyTotals, data.ticketLog ?? localData.ticketLog, {
         agentName: data.agentName ?? localData.agentName,
         theme: data.theme ?? localData.theme,
-        countingEnabled: data.countingEnabled ?? localData.countingEnabled,
-        syncId: localData.syncId
+        countingEnabled: data.countingEnabled ?? localData.countingEnabled
       });
     } catch (e) {
       console.warn('[ZTK Cloud] Cloud sync failed in saveAll, local data is safe:', e.message);
@@ -345,6 +346,9 @@ async function getStats() {
     ...(dt[k] ?? emptyTotals())
   }));
 
+  // Get user profile for the popup
+  const user = await getUserProfile();
+
   return {
     today,
     week,
@@ -355,9 +359,9 @@ async function getStats() {
     agentName: data.agentName,
     countingEnabled: data.countingEnabled,
     theme: data.theme,
-    syncId: data.syncId,
     tgToken: data.tgToken,
     tgChatId: data.tgChatId,
+    user, // { uid, email, displayName, photoUrl } or null
     lastEvent: data.events.length > 0 ? data.events[data.events.length - 1] : null,
     todayKey: todayKey(),
     dailyTotals: dt   // expose so popup can check which days have data
@@ -600,34 +604,61 @@ async function exportData(format, rangeType, rangeParams) {
     return a.timestamp - b.timestamp;
   });
 
+  // ── Step 3: Group dedupedLog by date ─────────────────────────────────────
+  // For each date, bucket tickets per column index so we can emit them
+  // in a compact, gap-free layout.
+  const TICKET_COL_INDICES = [
+    headers.indexOf('New Handled Tickets - Moved to Open or Pending'), // col 5
+    headers.indexOf('Updates to Existing'),                             // col 6
+    headers.indexOf('New/Pending/Open Tickets- Moved to Compliance'),  // col 7
+    headers.indexOf('New/Pending/Open Tickets - Moved to Escalations'),// col 8
+    headers.indexOf('Closed Tickets if any')                           // col 10
+  ];
+
+  // Gather unique dates in sorted order
+  const dateGroups = [];
+  const dateGroupMap = new Map();
   for (const entry of dedupedLog) {
-    const shiftInfo = getShiftInfo(entry.date);
-    // Format date as M/D/YYYY
-    const [y, m, d] = entry.date.split('-');
-    const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
-
-    const row = [
-      fmtDate,
-      agentName,
-      shiftInfo.shift,
-      shiftInfo.startTime,
-      shiftInfo.endTime,
-      '', // New Handled
-      '', // Updates to Existing
-      '', // Compliance
-      '', // Escalation
-      '', // Remarks
-      ''  // Closed
-    ];
-
-    // Place ticket number in the correct column
+    if (!dateGroupMap.has(entry.date)) {
+      // columns: index → array of ticket strings for that column
+      const colBuckets = {};
+      TICKET_COL_INDICES.forEach(i => { colBuckets[i] = []; });
+      dateGroupMap.set(entry.date, colBuckets);
+      dateGroups.push(entry.date);
+    }
     const colName = TYPE_TO_COLUMN[entry.type];
     const colIdx = headers.indexOf(colName);
-    if (colIdx !== -1) {
-      row[colIdx] = `#${entry.ticketNumber}`;
+    if (colIdx !== -1 && dateGroupMap.get(entry.date)[colIdx] !== undefined) {
+      dateGroupMap.get(entry.date)[colIdx].push(`#${entry.ticketNumber}`);
     }
+  }
 
-    rows.push(row);
+  // Emit rows: one row per "slot" within each date group
+  for (const date of dateGroups) {
+    const colBuckets = dateGroupMap.get(date);
+    const shiftInfo = getShiftInfo(date);
+    const [y, m, d] = date.split('-');
+    const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
+
+    // Max tickets across all columns for this date
+    const maxSlots = Math.max(...TICKET_COL_INDICES.map(i => colBuckets[i].length), 1);
+
+    for (let slot = 0; slot < maxSlots; slot++) {
+      // Metadata (Date, Agent, Shift, Times) only on first row of this date group
+      const meta = slot === 0
+        ? [fmtDate, agentName, shiftInfo.shift, shiftInfo.startTime, shiftInfo.endTime]
+        : ['', '', '', '', ''];
+
+      // Build ticket columns — blank if no ticket in this slot for that column
+      const row = [...meta, '', '', '', '', '', ''];
+      // col indices 5,6,7,8,9,10 → array positions after meta (offset 5)
+      TICKET_COL_INDICES.forEach(colIdx => {
+        const ticket = colBuckets[colIdx][slot] ?? '';
+        row[colIdx] = ticket;
+      });
+
+      rows.push(row);
+    }
   }
 
   // If no ticket log entries, fall back to daily totals summary
@@ -674,19 +705,6 @@ async function setCounting(enabled) {
 
 async function setTheme(theme) {
   await saveAll({ theme });
-  return { success: true };
-}
-
-// ── Sync ID ───────────────────────────────────
-
-async function setSyncId(syncId) {
-  await saveLocal({ syncId });
-  if (syncId && isFirebaseConfigured()) {
-    // Immediately pull from cloud with the new ID
-    console.log('[ZTK Cloud] Sync ID set to:', syncId, '— pulling data…');
-    lastCloudSyncTime = 0; // force refresh
-    await pullFromCloud();
-  }
   return { success: true };
 }
 
@@ -739,6 +757,63 @@ async function sendTelegramNote(text) {
   }
 }
 
+// ── Auth Handlers ─────────────────────────────
+
+async function handleSignIn() {
+  try {
+    const googleToken = await getGoogleAuthToken(true);
+    const session = await exchangeForFirebaseIdToken(googleToken);
+
+    // Cache session
+    await new Promise((resolve) => {
+      chrome.storage.local.set({ [AUTH_SESSION_KEY]: session }, resolve);
+    });
+
+    // Immediately pull from cloud after sign-in
+    lastCloudSyncTime = 0;
+    await pullFromCloud();
+
+    return {
+      success: true,
+      user: {
+        uid: session.uid,
+        email: session.email,
+        displayName: session.displayName,
+        photoUrl: session.photoUrl
+      }
+    };
+  } catch (e) {
+    console.error('[ZTK Auth] Sign-in failed:', e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+async function handleSignOut() {
+  try {
+    await signOut();
+    return { success: true };
+  } catch (e) {
+    console.error('[ZTK Auth] Sign-out failed:', e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+async function handleGetAuthState() {
+  const session = await getFirebaseSession(false);
+  if (session) {
+    return {
+      isSignedIn: true,
+      user: {
+        uid: session.uid,
+        email: session.email,
+        displayName: session.displayName,
+        photoUrl: session.photoUrl
+      }
+    };
+  }
+  return { isSignedIn: false, user: null };
+}
+
 // ── Message handler ───────────────────────────
 
 chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
@@ -769,9 +844,6 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'SET_THEME':
           sendResponse(await setTheme(msg.theme));
           break;
-        case 'SET_SYNC_ID':
-          sendResponse(await setSyncId(msg.syncId));
-          break;
         case 'SET_TELEGRAM':
           sendResponse(await saveTelegramSettings(msg.tgToken, msg.tgChatId));
           break;
@@ -786,6 +858,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'GET_DETAILED_STATS':
           sendResponse(await getDetailedStats(msg.range, msg.dateParam));
           break;
+        // ── Auth actions ──
+        case 'SIGN_IN':
+          sendResponse(await handleSignIn());
+          break;
+        case 'SIGN_OUT':
+          sendResponse(await handleSignOut());
+          break;
+        case 'GET_AUTH_STATE':
+          sendResponse(await handleGetAuthState());
+          break;
         default:
           sendResponse({ error: 'Unknown action' });
       }
@@ -797,17 +879,25 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
   return true; // keep message channel open for async
 });
 
-// ── Startup: pull latest data from cloud ──────
+// ── Startup: restore session + pull latest data ──
 
 chrome.runtime.onStartup.addListener(async () => {
-  console.log('[ZTK Cloud] Browser started — pulling latest cloud data…');
-  await pullFromCloud();
+  console.log('[ZTK Cloud] Browser started — checking auth and pulling cloud data…');
+  const session = await getFirebaseSession(false); // silent, non-interactive
+  if (session) {
+    await pullFromCloud();
+  } else {
+    console.log('[ZTK Cloud] No auth session on startup — user must sign in via popup');
+  }
 });
 
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install' || details.reason === 'update') {
-    console.log(`[ZTK Cloud] Extension ${details.reason} — syncing with cloud…`);
-    await pullFromCloud();
-    console.log('[ZTK Cloud] Migration complete.');
+    console.log(`[ZTK Cloud] Extension ${details.reason} — checking auth and syncing…`);
+    const session = await getFirebaseSession(false);
+    if (session) {
+      await pullFromCloud();
+    }
+    console.log('[ZTK Cloud] Startup sync complete.');
   }
 });

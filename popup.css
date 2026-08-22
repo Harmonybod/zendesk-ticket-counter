@@ -598,7 +598,7 @@ body {
     max-height: 0;
     opacity: 0;
     pointer-events: none;
-    transition: max-height 0.3s ease, opacity 0.2s ease, padding 0.3s ease, border 0.3s ease;
+    transition: max-height 0.35s ease, opacity 0.2s ease, padding 0.3s ease, border 0.3s ease;
 }
 
 [data-theme="light"] .date-picker-panel {
@@ -606,7 +606,7 @@ body {
 }
 
 .date-picker-panel.open {
-    max-height: 250px;
+    max-height: 320px;
     opacity: 1;
     pointer-events: auto;
 }
@@ -879,6 +879,86 @@ body {
     border-radius: 3px;
 }
 
+/* ── Last Handled Ticket Section ────────────────────────────────────────── */
+.last-ticket-section {
+    margin: 0 14px 10px;
+    padding: 10px 14px;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    transition: border-color 0.2s, background 0.2s;
+    min-height: 40px;
+}
+
+.last-ticket-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.last-ticket-body {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.last-ticket-dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    background: var(--text-3);
+    transition: background 0.3s;
+}
+
+.last-ticket-dot.type-open   { background: var(--red);    box-shadow: 0 0 6px var(--red-glow); }
+.last-ticket-dot.type-new    { background: var(--yellow); box-shadow: 0 0 6px var(--yellow-glow); }
+.last-ticket-dot.type-team   { background: var(--blue);   box-shadow: 0 0 6px var(--blue-glow); }
+.last-ticket-dot.type-compliance  { background: var(--green);  box-shadow: 0 0 6px var(--green-glow); }
+.last-ticket-dot.type-escalation  { background: var(--brown);  box-shadow: 0 0 6px var(--brown-glow); }
+.last-ticket-dot.type-closed { background: var(--gray);   box-shadow: 0 0 6px var(--gray-glow); }
+
+.last-ticket-num {
+    font-size: 13px;
+    font-weight: 800;
+    color: var(--text-1);
+    letter-spacing: -0.3px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.last-ticket-type {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--text-2);
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    padding: 2px 7px;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.last-ticket-time {
+    font-size: 10px;
+    color: var(--text-3);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .footer {
     display: flex;
@@ -1144,5 +1224,175 @@ body {
 }
 
 .detail-chart-wrap canvas {
+    display: block;
+}
+
+/* ── Auth Screen ─────────────────────────────────────────────────────────── */
+
+.auth-screen {
+    display: none;
+    position: fixed;
+    inset: 0;
+    z-index: 9999;
+    background: var(--bg-0);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+}
+
+.auth-screen.visible {
+    display: flex;
+}
+
+.auth-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    padding: 40px 32px 36px;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow:
+        0 8px 32px rgba(0, 0, 0, 0.25),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    text-align: center;
+    max-width: 340px;
+    width: 100%;
+    animation: authFadeIn 0.4s ease-out;
+}
+
+@keyframes authFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(12px) scale(0.97);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.auth-logo {
+    width: 56px;
+    height: 56px;
+    background: linear-gradient(135deg, var(--accent), #3ecfcf);
+    border-radius: 14px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 800;
+    font-size: 20px;
+    color: #fff;
+    letter-spacing: -0.5px;
+    box-shadow: 0 4px 16px rgba(108, 99, 255, 0.3);
+}
+
+.auth-title {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text-1);
+    margin: 0;
+    letter-spacing: -0.3px;
+}
+
+.auth-subtitle {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 12.5px;
+    color: var(--text-2);
+    line-height: 1.5;
+    max-width: 260px;
+    margin: 0;
+}
+
+.btn-google-signin {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 24px;
+    background: #ffffff;
+    color: #3c4043;
+    border: 1px solid #dadce0;
+    border-radius: 24px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.25s ease;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-top: 4px;
+}
+
+.btn-google-signin:hover {
+    background: #f8f9fa;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    transform: translateY(-1px);
+}
+
+.btn-google-signin:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.btn-google-signin img {
+    width: 20px;
+    height: 20px;
+}
+
+.auth-note {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    color: var(--red);
+    min-height: 16px;
+    margin: 0;
+}
+
+/* ── Sign Out Button ─────────────────────────────────────────────────────── */
+
+.btn-signout {
+    background: rgba(255, 107, 107, 0.1);
+    color: var(--red);
+    border: 1px solid rgba(255, 107, 107, 0.2);
+    border-radius: 8px;
+    padding: 5px 12px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    white-space: nowrap;
+}
+
+.btn-signout:hover {
+    background: rgba(255, 107, 107, 0.2);
+    border-color: rgba(255, 107, 107, 0.4);
+}
+
+/* ── Force Sync Button (compact) ─────────────────────────────────────────── */
+
+.btn-force-sync {
+    background: rgba(116, 185, 255, 0.12);
+    color: var(--blue);
+    border: 1px solid rgba(116, 185, 255, 0.25);
+    font-size: 11px;
+    padding: 4px 10px;
+    min-width: auto;
+    white-space: nowrap;
+}
+
+.btn-force-sync:hover {
+    background: rgba(116, 185, 255, 0.22);
+    border-color: rgba(116, 185, 255, 0.4);
+}
+
+/* ── App Main Visibility ─────────────────────────────────────────────────── */
+
+.app-main {
+    display: none;
+}
+
+.app-main.visible {
     display: block;
 }

@@ -10,228 +10,261 @@
 
 <body>
 
-  <!-- ── Header ── -->
-  <header class="header">
-    <div class="header-left">
-      <div class="logo">TT</div>
-      <div class="header-text">
-        <h1 class="app-title">Ticket Tracker</h1>
-        <span class="agent-name" id="agent-name">Zendesk Agent</span>
-      </div>
-    </div>
-    <button class="settings-btn" id="settings-btn" title="Settings">⚙</button>
-  </header>
-
-  <!-- ── Settings Panel (slide-down) ── -->
-  <div class="settings-panel" id="settings-panel" aria-hidden="true">
-    <div class="settings-inner">
-
-      <!-- Agent Name -->
-      <div class="settings-row">
-        <label class="settings-label" for="agent-name-input">Agent Name</label>
-        <div class="settings-name-row">
-          <input type="text" id="agent-name-input" placeholder="Your name..." maxlength="30" />
-          <button class="btn-save" id="save-name">Save</button>
-        </div>
-      </div>
-
-      <div class="settings-divider"></div>
-
-      <!-- Counting Toggle -->
-      <div class="settings-row settings-row-inline">
-        <div class="settings-label-group">
-          <span class="settings-label">Widget Counting</span>
-          <span class="settings-sublabel">Show count circles &amp; daily total on widget</span>
-        </div>
-        <button class="toggle-switch" id="counting-toggle" role="switch" aria-checked="true">
-          <span class="toggle-thumb"></span>
-        </button>
-      </div>
-
-      <div class="settings-divider"></div>
-
-      <!-- Theme Toggle -->
-      <div class="settings-row settings-row-inline">
-        <div class="settings-label-group">
-          <span class="settings-label">Appearance</span>
-          <span class="settings-sublabel" id="theme-sublabel">Dark mode</span>
-        </div>
-        <button class="toggle-switch" id="theme-toggle" role="switch" aria-checked="true">
-          <span class="toggle-thumb"></span>
-        </button>
-      </div>
-
-      <div class="settings-divider"></div>
-
-      <!-- Telegram Note Settings -->
-      <div class="settings-row">
-        <label class="settings-label">✉️ Telegram Notes</label>
-        <span class="settings-sublabel">Bot Token (from @BotFather)</span>
-        <input type="text" id="tg-token-input" placeholder="e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" style="width:100%; margin-top:4px;" />
-        <span class="settings-sublabel" style="display:block; margin-top:8px;">Chat ID (where to send)</span>
-        <div class="settings-name-row" style="margin-top:4px;">
-          <input type="text" id="tg-chat-id-input" placeholder="e.g. -100123456789" />
-          <button class="btn-save" id="save-tg-btn">Save</button>
-        </div>
-        <span class="settings-sublabel" id="tg-status" style="margin-top:4px; display:block;"></span>
-      </div>
-
-      <div class="settings-divider"></div>
-
-      <!-- Cloud Sync -->
-      <div class="settings-row">
-        <label class="settings-label" for="sync-id-input">☁️ Cloud Sync ID</label>
-        <span class="settings-sublabel">Enter the same ID on all devices to sync data</span>
-        <div class="settings-name-row" style="margin-top:6px;">
-          <input type="text" id="sync-id-input" placeholder="e.g. my-tracker-123" maxlength="40" />
-          <button class="btn-save" id="save-sync-id">Save</button>
-        </div>
-      </div>
-      <div class="settings-row" style="padding-top:4px;">
-        <button class="btn-save" id="force-sync-btn" style="width:100%;background:rgba(116,185,255,0.15);color:#74b9ff;border:1px solid rgba(116,185,255,0.3);">🔄 Force Sync Now</button>
-        <span class="settings-sublabel" id="sync-status" style="margin-top:4px;"></span>
-      </div>
-
+  <!-- ── Auth Screen (shown when not signed in) ── -->
+  <div class="auth-screen" id="auth-screen" aria-hidden="true">
+    <div class="auth-card">
+      <div class="auth-logo">TT</div>
+      <h2 class="auth-title">Zendesk Ticket Tracker</h2>
+      <p class="auth-subtitle">Sign in with your Google account to sync your data across all devices.</p>
+      <button class="btn-google-signin" id="google-signin-btn">
+        <img src="icons/google.svg" alt="" width="20" height="20" />
+        Sign in with Google
+      </button>
+      <p class="auth-note" id="auth-error"></p>
     </div>
   </div>
 
-  <!-- ── Range Switcher ── -->
-  <nav class="range-nav">
-    <button class="range-btn active" id="range-today" data-range="today">Today</button>
-    <button class="range-btn" id="range-week" data-range="week">Week</button>
-    <button class="range-btn" id="range-month" data-range="month">Month</button>
-  </nav>
+  <!-- ── Main App (hidden until signed in) ── -->
+  <div class="app-main" id="app-main">
 
-  <!-- ── Stat Cards ── -->
-  <section class="stats-grid" id="stats-grid">
-    <div class="stat-card stat-open">
-      <div class="stat-dot red-dot"></div>
-      <div class="stat-value" id="stat-open">0</div>
-      <div class="stat-label">Open</div>
-    </div>
-    <div class="stat-card stat-new">
-      <div class="stat-dot yellow-dot"></div>
-      <div class="stat-value" id="stat-new">0</div>
-      <div class="stat-label">New</div>
-    </div>
-    <div class="stat-card stat-team">
-      <div class="stat-dot blue-dot"></div>
-      <div class="stat-value" id="stat-team">0</div>
-      <div class="stat-label">Team</div>
-    </div>
-    <div class="stat-card stat-compliance">
-      <div class="stat-dot green-dot"></div>
-      <div class="stat-value" id="stat-compliance">0</div>
-      <div class="stat-label">Cmpl</div>
-    </div>
-    <div class="stat-card stat-escalation">
-      <div class="stat-dot brown-dot"></div>
-      <div class="stat-value" id="stat-escalation">0</div>
-      <div class="stat-label">Esc</div>
-    </div>
-    <div class="stat-card stat-closed">
-      <div class="stat-dot gray-dot"></div>
-      <div class="stat-value" id="stat-closed">0</div>
-      <div class="stat-label">Closed</div>
-    </div>
-    <div class="stat-card stat-total">
-      <div class="stat-dot total-dot">Σ</div>
-      <div class="stat-value" id="stat-total">0</div>
-      <div class="stat-label">Total</div>
-    </div>
-  </section>
-
-  <!-- ── Chart ── -->
-  <section class="chart-section">
-    <div class="chart-header">
-      <button class="chart-title-btn" id="chart-title-btn" title="Click to pick a custom date">
-        <span id="chart-title">Today</span>
-        <span class="chart-title-icon">📅</span>
-      </button>
-      <div class="chart-legend">
-        <span class="legend-dot red-dot"></span> Open
-        <span class="legend-dot yellow-dot"></span> New
-        <span class="legend-dot blue-dot"></span> Team
-        <span class="legend-dot green-dot"></span> Cmpl
-        <span class="legend-dot brown-dot"></span> Esc
-        <span class="legend-dot gray-dot"></span> Close
-      </div>
-    </div>
-
-    <!-- ── Date Picker Panel ── -->
-    <div class="date-picker-panel" id="date-picker-panel" aria-hidden="true">
-      <div class="picker-header">
-        <button class="picker-nav" id="picker-prev">‹</button>
-        <span class="picker-period" id="picker-period"></span>
-        <button class="picker-nav" id="picker-next">›</button>
-      </div>
-      <!-- Day picker: calendar grid -->
-      <div class="picker-cal" id="picker-cal"></div>
-      <!-- Month picker: 12 month buttons -->
-      <div class="picker-months" id="picker-months" style="display:none;"></div>
-    </div>
-
-    <div class="chart-wrap">
-      <canvas id="main-chart"></canvas>
-      <button class="chart-expand-btn" id="chart-expand-btn" title="Open detailed chart">⛶</button>
-    </div>
-  </section>
-
-  <!-- ── All-Time Stats ── -->
-  <section class="alltime-section">
-    <div class="alltime-top-row">
-      <div class="alltime-label">All-Time Total</div>
-      <div class="alltime-value" id="alltime-total">0</div>
-    </div>
-    <div class="alltime-sub" id="alltime-sub">Open: 0 · New: 0 · Team: 0 · Cmpl: 0 · Esc: 0 · Closed: 0</div>
-  </section>
-
-  <!-- ── Detailed Chart Modal ── -->
-  <div class="detail-modal-overlay" id="detail-modal" aria-hidden="true">
-    <div class="detail-modal">
-      <div class="detail-modal-header">
-        <div class="detail-modal-title">
-          <span id="detail-chart-title">Detailed View</span>
-        </div>
-        <div class="detail-modal-controls">
-          <nav class="detail-range-nav">
-            <button class="detail-range-btn active" data-drange="today">Today</button>
-            <button class="detail-range-btn" data-drange="week">Week</button>
-            <button class="detail-range-btn" data-drange="month">Month</button>
-          </nav>
-          <button class="detail-date-btn" id="detail-date-btn" title="Pick a date">📅</button>
-          <input type="date" id="detail-date-input" style="position:absolute;opacity:0;width:0;height:0;" />
-          <button class="detail-close-btn" id="detail-close-btn">✕</button>
+    <!-- ── Header ── -->
+    <header class="header">
+      <div class="header-left">
+        <div class="logo">TT</div>
+        <div class="header-text">
+          <h1 class="app-title">Ticket Tracker</h1>
+          <span class="agent-name" id="agent-name">Zendesk Agent</span>
         </div>
       </div>
-      <div class="detail-legend" id="detail-legend">
-        <span class="legend-dot red-dot"></span> Open
-        <span class="legend-dot yellow-dot"></span> New
-        <span class="legend-dot blue-dot"></span> Team
-        <span class="legend-dot green-dot"></span> Cmpl
-        <span class="legend-dot brown-dot"></span> Esc
-        <span class="legend-dot gray-dot"></span> Close
-      </div>
-      <div class="detail-chart-wrap">
-        <canvas id="detail-chart"></canvas>
-      </div>
-    </div>
-  </div>
+      <button class="settings-btn" id="settings-btn" title="Settings">⚙</button>
+    </header>
 
-  <!-- ── Footer Actions ── -->
-  <footer class="footer">
-    <button class="footer-btn undo-btn" id="undo-btn" title="Undo last recorded ticket">
-      <span class="footer-icon">↩</span> Undo Last
-    </button>
-    <div class="export-group">
-      <button class="footer-btn export-btn" id="export-csv">
-        <span class="footer-icon">⬇</span> CSV
-      </button>
-      <button class="footer-btn export-btn" id="export-json">
-        <span class="footer-icon">⬇</span> JSON
-      </button>
+    <!-- ── Settings Panel (slide-down) ── -->
+    <div class="settings-panel" id="settings-panel" aria-hidden="true">
+      <div class="settings-inner">
+
+        <!-- User Profile (shown when signed in) -->
+        <div class="settings-row settings-row-inline" id="user-profile-row">
+          <div class="settings-label-group">
+            <span class="settings-label" id="user-display-name">User</span>
+            <span class="settings-sublabel" id="user-email">user@example.com</span>
+          </div>
+          <button class="btn-signout" id="sign-out-btn">Sign out</button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Sync Status -->
+        <div class="settings-row settings-row-inline">
+          <span class="settings-sublabel" id="sync-status">☁️ Synced to Google account</span>
+          <button class="btn-save btn-force-sync" id="force-sync-btn">🔄 Sync</button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Agent Name -->
+        <div class="settings-row">
+          <label class="settings-label" for="agent-name-input">Agent Name</label>
+          <div class="settings-name-row">
+            <input type="text" id="agent-name-input" placeholder="Your name..." maxlength="30" />
+            <button class="btn-save" id="save-name">Save</button>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Counting Toggle -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Widget Counting</span>
+            <span class="settings-sublabel">Show count circles &amp; daily total on widget</span>
+          </div>
+          <button class="toggle-switch" id="counting-toggle" role="switch" aria-checked="true">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Theme Toggle -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Appearance</span>
+            <span class="settings-sublabel" id="theme-sublabel">Dark mode</span>
+          </div>
+          <button class="toggle-switch" id="theme-toggle" role="switch" aria-checked="true">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Telegram Note Settings -->
+        <div class="settings-row">
+          <label class="settings-label">✉️ Telegram Notes</label>
+          <span class="settings-sublabel">Bot Token (from @BotFather)</span>
+          <input type="text" id="tg-token-input" placeholder="e.g. 123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11" style="width:100%; margin-top:4px;" />
+          <span class="settings-sublabel" style="display:block; margin-top:8px;">Chat ID (where to send)</span>
+          <div class="settings-name-row" style="margin-top:4px;">
+            <input type="text" id="tg-chat-id-input" placeholder="e.g. -100123456789" />
+            <button class="btn-save" id="save-tg-btn">Save</button>
+          </div>
+          <span class="settings-sublabel" id="tg-status" style="margin-top:4px; display:block;"></span>
+        </div>
+
+      </div>
     </div>
-  </footer>
+
+    <!-- ── Range Switcher ── -->
+    <nav class="range-nav">
+      <button class="range-btn active" id="range-today" data-range="today">Today</button>
+      <button class="range-btn" id="range-week" data-range="week">Week</button>
+      <button class="range-btn" id="range-month" data-range="month">Month</button>
+    </nav>
+
+    <!-- ── Stat Cards ── -->
+    <section class="stats-grid" id="stats-grid">
+      <div class="stat-card stat-open">
+        <div class="stat-dot red-dot"></div>
+        <div class="stat-value" id="stat-open">0</div>
+        <div class="stat-label">Open</div>
+      </div>
+      <div class="stat-card stat-new">
+        <div class="stat-dot yellow-dot"></div>
+        <div class="stat-value" id="stat-new">0</div>
+        <div class="stat-label">New</div>
+      </div>
+      <div class="stat-card stat-team">
+        <div class="stat-dot blue-dot"></div>
+        <div class="stat-value" id="stat-team">0</div>
+        <div class="stat-label">Team</div>
+      </div>
+      <div class="stat-card stat-compliance">
+        <div class="stat-dot green-dot"></div>
+        <div class="stat-value" id="stat-compliance">0</div>
+        <div class="stat-label">Cmpl</div>
+      </div>
+      <div class="stat-card stat-escalation">
+        <div class="stat-dot brown-dot"></div>
+        <div class="stat-value" id="stat-escalation">0</div>
+        <div class="stat-label">Esc</div>
+      </div>
+      <div class="stat-card stat-closed">
+        <div class="stat-dot gray-dot"></div>
+        <div class="stat-value" id="stat-closed">0</div>
+        <div class="stat-label">Closed</div>
+      </div>
+      <div class="stat-card stat-total">
+        <div class="stat-dot total-dot">Σ</div>
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+    </section>
+
+    <!-- ── Chart ── -->
+    <section class="chart-section">
+      <div class="chart-header">
+        <button class="chart-title-btn" id="chart-title-btn" title="Click to pick a custom date">
+          <span id="chart-title">Today</span>
+          <span class="chart-title-icon">📅</span>
+        </button>
+        <div class="chart-legend">
+          <span class="legend-dot red-dot"></span> Open
+          <span class="legend-dot yellow-dot"></span> New
+          <span class="legend-dot blue-dot"></span> Team
+          <span class="legend-dot green-dot"></span> Cmpl
+          <span class="legend-dot brown-dot"></span> Esc
+          <span class="legend-dot gray-dot"></span> Close
+        </div>
+      </div>
+
+      <!-- ── Date Picker Panel ── -->
+      <div class="date-picker-panel" id="date-picker-panel" aria-hidden="true">
+        <div class="picker-header">
+          <button class="picker-nav" id="picker-prev">‹</button>
+          <span class="picker-period" id="picker-period"></span>
+          <button class="picker-nav" id="picker-next">›</button>
+        </div>
+        <!-- Day picker: calendar grid -->
+        <div class="picker-cal" id="picker-cal"></div>
+        <!-- Month picker: 12 month buttons -->
+        <div class="picker-months" id="picker-months" style="display:none;"></div>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="main-chart"></canvas>
+        <button class="chart-expand-btn" id="chart-expand-btn" title="Open detailed chart">⛶</button>
+      </div>
+    </section>
+
+    <!-- ── All-Time Stats ── -->
+    <section class="alltime-section">
+      <div class="alltime-top-row">
+        <div class="alltime-label">All-Time Total</div>
+        <div class="alltime-value" id="alltime-total">0</div>
+      </div>
+      <div class="alltime-sub" id="alltime-sub">Open: 0 · New: 0 · Team: 0 · Cmpl: 0 · Esc: 0 · Closed: 0</div>
+    </section>
+
+    <!-- ── Last Handled Ticket ── -->
+    <section class="last-ticket-section" id="last-ticket-section">
+      <div class="last-ticket-label">Last Handled</div>
+      <div class="last-ticket-body">
+        <span class="last-ticket-dot" id="last-ticket-dot"></span>
+        <span class="last-ticket-num" id="last-ticket-num">—</span>
+        <span class="last-ticket-type" id="last-ticket-type">No tickets yet</span>
+        <span class="last-ticket-time" id="last-ticket-time"></span>
+      </div>
+    </section>
+
+    <!-- ── Detailed Chart Modal ── -->
+    <div class="detail-modal-overlay" id="detail-modal" aria-hidden="true">
+      <div class="detail-modal">
+        <div class="detail-modal-header">
+          <div class="detail-modal-title">
+            <span id="detail-chart-title">Detailed View</span>
+          </div>
+          <div class="detail-modal-controls">
+            <nav class="detail-range-nav">
+              <button class="detail-range-btn active" data-drange="today">Today</button>
+              <button class="detail-range-btn" data-drange="week">Week</button>
+              <button class="detail-range-btn" data-drange="month">Month</button>
+            </nav>
+            <button class="detail-date-btn" id="detail-date-btn" title="Pick a date">📅</button>
+            <input type="date" id="detail-date-input" style="position:absolute;opacity:0;width:0;height:0;" />
+            <button class="detail-close-btn" id="detail-close-btn">✕</button>
+          </div>
+        </div>
+        <div class="detail-legend" id="detail-legend">
+          <span class="legend-dot red-dot"></span> Open
+          <span class="legend-dot yellow-dot"></span> New
+          <span class="legend-dot blue-dot"></span> Team
+          <span class="legend-dot green-dot"></span> Cmpl
+          <span class="legend-dot brown-dot"></span> Esc
+          <span class="legend-dot gray-dot"></span> Close
+        </div>
+        <div class="detail-chart-wrap">
+          <canvas id="detail-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Footer Actions ── -->
+    <footer class="footer">
+      <button class="footer-btn undo-btn" id="undo-btn" title="Undo last recorded ticket">
+        <span class="footer-icon">↩</span> Undo Last
+      </button>
+      <div class="export-group">
+        <button class="footer-btn export-btn" id="export-csv">
+          <span class="footer-icon">⬇</span> CSV
+        </button>
+        <button class="footer-btn export-btn" id="export-json">
+          <span class="footer-icon">⬇</span> JSON
+        </button>
+      </div>
+    </footer>
+
+  </div><!-- /app-main -->
 
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>

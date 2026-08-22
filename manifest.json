@@ -1,12 +1,20 @@
 {
   "manifest_version": 3,
   "name": "Zendesk Ticket Tracker",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Track open, new, and team tickets on Zendesk with a floating widget. Double-click to count. View daily, weekly, and monthly stats with charts. Cloud sync across devices.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
+  },
+  "oauth2": {
+    "client_id": "360976988892-0kg8lk2p03j7mgl8v7ld4i45544r0ovt.apps.googleusercontent.com",
+    "scopes": [
+      "openid",
+      "email",
+      "profile"
+    ]
   },
   "permissions": [
     "storage",
@@ -17,6 +25,7 @@
   "host_permissions": [
     "*://*.zendesk.com/*",
     "https://firestore.googleapis.com/*",
+    "https://identitytoolkit.googleapis.com/*",
     "https://api.telegram.org/*"
   ],
   "background": {

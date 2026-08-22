@@ -17,7 +17,7 @@
     let clickCounts = { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 };
     let logoClicks = 0;
     let logoTimer = null;
-    let isCollapsed = false;
+    let isHorizontal = false;
     let isDragging = false;
     let dragOffset = { x: 0, y: 0 };
 
@@ -141,8 +141,9 @@
         const label = document.createElement('div');
         label.className = `ztk-float-label ztk-float-${FLOAT_COLOR_MAP[type] || 'blue'}`;
         label.textContent = '+1';
-        label.style.left = `${rect.left + rect.width / 2 - 12}px`;
-        label.style.top = `${rect.top - 8}px`;
+        // Center the label over the button (28px font, roughly 28px wide)
+        label.style.left = `${rect.left + rect.width / 2 - 18}px`;
+        label.style.top = `${rect.top - 14}px`;
         document.body.appendChild(label);
         label.addEventListener('animationend', () => label.remove());
     }
@@ -201,16 +202,16 @@
         }
     }
 
-    // ── Logo double-click: minimize / expand ─────
+    // ── Logo double-click: toggle horizontal / vertical layout ───────────
     function handleLogoClick() {
         logoClicks++;
         if (logoTimer) clearTimeout(logoTimer);
 
         if (logoClicks >= 2) {
             logoClicks = 0;
-            isCollapsed = !isCollapsed;
+            isHorizontal = !isHorizontal;
             const widget = document.getElementById(WIDGET_ID);
-            if (widget) widget.classList.toggle('ztk-collapsed', isCollapsed);
+            if (widget) widget.classList.toggle('ztk-horizontal', isHorizontal);
         } else {
             logoTimer = setTimeout(() => { logoClicks = 0; }, DOUBLE_CLICK_DELAY);
         }
@@ -228,6 +229,7 @@
             widget.style.transition = 'none';
             widget.style.transform = 'none';
             widget.style.top = `${rect.top}px`;
+            widget.style.bottom = 'auto'; // clear any bottom anchor (e.g. from horizontal mode)
             widget.style.right = 'auto';
             widget.style.left = `${rect.left}px`;
             e.preventDefault();
