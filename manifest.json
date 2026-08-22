@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Zendesk Ticket Tracker",
-  "version": "3.1.0",
-  "description": "Track open, new, and team tickets on Zendesk with a floating widget. Double-click to count. View daily, weekly, and monthly stats with charts. Cloud sync across devices.",
+  "version": "4.0.0",
+  "description": "Premium Zendesk ticket analytics — leaderboard, ratio breakdowns, hourly pacing, calendar inspector, Excel export, cloud sync, and floating overlay.",
   "icons": {
     "16": "icons/icon16.png",
     "48": "icons/icon48.png",
@@ -20,7 +20,8 @@
     "storage",
     "activeTab",
     "identity",
-    "identity.email"
+    "identity.email",
+    "downloads"
   ],
   "host_permissions": [
     "*://*.zendesk.com/*",

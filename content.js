@@ -1,88 +1,231 @@
 // ─────────────────────────────────────────────
-// Zendesk Ticket Tracker — Content Script
-// Injects floating widget, handles double-click counting
+// Zendesk Ticket Tracker — Content Script (v4.0.0)
+// Premium slender draggable overlay + Payee Issue scraper + Telegram notes + live event logging
 // ─────────────────────────────────────────────
 
 (function () {
     'use strict';
 
-    const WIDGET_ID = 'ztk-widget';
-    const DOUBLE_CLICK_DELAY = 350; // ms window for double-click detection
+    const OVERLAY_ID = 'zd-tracker-overlay';
 
-    // ── Guard: prevent duplicate injection ───────
-    if (document.getElementById(WIDGET_ID)) return;
+    // Guard: avoid duplicate injection
+    if (document.getElementById(OVERLAY_ID)) return;
 
-    // ── State ────────────────────────────────────
-    let clickTimers = { open: null, new: null, team: null, compliance: null, escalation: null, closed: null };
-    let clickCounts = { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 };
-    let logoClicks = 0;
-    let logoTimer = null;
-    let isHorizontal = false;
-    let isDragging = false;
-    let dragOffset = { x: 0, y: 0 };
+    // ── Ticket ID Extraction ─────────────────────
+    function getTicketIdFromPage() {
+        const url = window.location.href;
+        const match = url.match(/\/tickets\/(\d+)/);
+        if (match && match[1]) return match[1];
 
-    // ── Build Widget DOM ─────────────────────────
-    function buildWidget() {
-        const widget = document.createElement('div');
-        widget.id = WIDGET_ID;
-        widget.innerHTML = `
-      <div id="ztk-header">
-        <div id="ztk-logo">TT</div>
-        <div id="ztk-title">Tracker</div>
+        const activeTabElement = document.querySelector('ul.tabs li.active, div[data-test-id="workspace-tab-active"]');
+        if (activeTabElement) {
+            const tabText = activeTabElement.innerText;
+            const tabMatch = tabText.match(/#(\d+)/);
+            if (tabMatch && tabMatch[1]) return tabMatch[1];
+        }
+
+        const tabList = document.querySelectorAll('div[role="tab"]');
+        for (let tab of tabList) {
+            if (tab.getAttribute('aria-selected') === 'true') {
+                const idMatch = tab.innerText.match(/#(\d+)/);
+                if (idMatch && idMatch[1]) return idMatch[1];
+            }
+        }
+        return null;
+    }
+
+    // ── Payee Issue Scraper ───────────────────────
+    function scrapeLivePayeeIssue() {
+        let payeeIssueVal = "-";
+        const labels = Array.from(document.querySelectorAll('label'));
+        const targetLabel = labels.find(el => {
+            const rect = el.getBoundingClientRect();
+            return el.textContent.includes('Payee Issue Type') && rect.width > 0 && rect.height > 0;
+        });
+
+        if (targetLabel && targetLabel.parentElement) {
+            const dropdownElement = targetLabel.parentElement.querySelector('[aria-haspopup="listbox"], [aria-haspopup="true"], select, button, .role-select');
+            if (dropdownElement) {
+                const rawText = dropdownElement.innerText || dropdownElement.textContent || dropdownElement.value || "";
+                let cleanText = rawText.trim().split('\n')[0].trim();
+
+                if (cleanText && cleanText !== "-" && !cleanText.toLowerCase().includes('select')) {
+                    if (cleanText.includes('::')) {
+                        const parts = cleanText.split('::');
+                        cleanText = parts[parts.length - 1].trim();
+                    }
+                    payeeIssueVal = cleanText;
+                }
+            }
+        }
+        return payeeIssueVal;
+    }
+
+    function generateShortCode(text) {
+        if (!text || text === "-") return "";
+        return text
+            .split(/\s+/)
+            .map(word => word.charAt(0).toUpperCase())
+            .join('')
+            .replace(/[^A-Z]/g, '')
+            .substring(0, 4);
+    }
+
+    // ── Animated Toast Notifications ─────────────
+    function showToastNotification(message, actionType, category) {
+        const oldToast = document.querySelector('.zd-toast-notification');
+        if (oldToast) oldToast.remove();
+
+        const toast = document.createElement('div');
+        toast.className = 'zd-toast-notification';
+        toast.innerText = message;
+
+        if (actionType === 'remove') {
+            toast.style.backgroundColor = '#ef4444';
+            toast.style.boxShadow = '0 0 15px rgba(239, 68, 68, 0.6)';
+        } else {
+            switch (category) {
+                case 'open':
+                case 'openPending':
+                    toast.style.backgroundColor = '#ff6b6b';
+                    toast.style.boxShadow = '0 0 15px rgba(255, 107, 107, 0.6)';
+                    break;
+                case 'new':
+                case 'updates':
+                    toast.style.backgroundColor = '#ffd93d';
+                    toast.style.color = '#0f172a';
+                    toast.style.boxShadow = '0 0 15px rgba(255, 217, 61, 0.6)';
+                    break;
+                case 'team':
+                    toast.style.backgroundColor = '#74b9ff';
+                    toast.style.boxShadow = '0 0 15px rgba(116, 185, 255, 0.6)';
+                    break;
+                case 'compliance':
+                    toast.style.backgroundColor = '#2ecc71';
+                    toast.style.boxShadow = '0 0 15px rgba(46, 204, 113, 0.6)';
+                    break;
+                case 'escalation':
+                case 'escalations':
+                    toast.style.backgroundColor = '#b5723e';
+                    toast.style.boxShadow = '0 0 15px rgba(181, 114, 62, 0.6)';
+                    break;
+                case 'closed':
+                    toast.style.backgroundColor = '#95a5a6';
+                    toast.style.boxShadow = '0 0 15px rgba(149, 165, 166, 0.6)';
+                    break;
+                default:
+                    toast.style.backgroundColor = '#2ecc71';
+                    toast.style.boxShadow = '0 0 15px rgba(46, 204, 113, 0.6)';
+            }
+        }
+
+        document.body.appendChild(toast);
+        setTimeout(() => { toast.remove(); }, 2500);
+    }
+
+    // ── Draggable Feature ─────────────────────────
+    function makeElementDraggable(elmnt) {
+        let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+        const handle = elmnt.querySelector('.zd-drag-handle');
+        if (handle) handle.onmousedown = dragMouseDown;
+
+        function dragMouseDown(e) {
+            e = e || window.event;
+            if (e.target !== handle && !handle.contains(e.target)) return;
+            e.preventDefault();
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            document.onmouseup = closeDragElement;
+            document.onmousemove = elementDrag;
+        }
+
+        function elementDrag(e) {
+            e = e || window.event;
+            e.preventDefault();
+            pos1 = pos3 - e.clientX;
+            pos2 = pos4 - e.clientY;
+            pos3 = e.clientX;
+            pos4 = e.clientY;
+            elmnt.style.top = (elmnt.offsetTop - pos2) + "px";
+            elmnt.style.left = (elmnt.offsetLeft - pos1) + "px";
+        }
+
+        function closeDragElement() {
+            document.onmouseup = null;
+            document.onmousemove = null;
+        }
+    }
+
+    // ── Overlay Display Refresher ─────────────────
+    function refreshOverlayDisplay() {
+        if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) return;
+
+        const ticketId = getTicketIdFromPage();
+        const displayContainer = document.getElementById('zd-current-ticket');
+        const issuePreviewBox = document.getElementById('zd-issue-preview-container');
+
+        if (displayContainer) {
+            if (ticketId) {
+                displayContainer.innerHTML = `<span class="zd-ticket-badge">#${ticketId}</span>`;
+
+                const liveIssue = scrapeLivePayeeIssue();
+                if (issuePreviewBox) {
+                    if (liveIssue !== "-") {
+                        const shortCode = generateShortCode(liveIssue);
+                        issuePreviewBox.innerHTML = `<span class="zd-issue-preview-badge" title="${liveIssue}">${shortCode}</span>`;
+
+                        chrome.storage.local.get(['ticketPayeeIssues'], (res) => {
+                            if (chrome.runtime.lastError) return;
+                            let mapping = res.ticketPayeeIssues || {};
+                            if (mapping[ticketId] !== liveIssue) {
+                                mapping[ticketId] = liveIssue;
+                                chrome.storage.local.set({ ticketPayeeIssues: mapping });
+                            }
+                        });
+                    } else {
+                        issuePreviewBox.innerHTML = "";
+                    }
+                }
+            } else {
+                displayContainer.innerHTML = `<span class="zd-ticket-none">None</span>`;
+                if (issuePreviewBox) issuePreviewBox.innerHTML = "";
+            }
+        }
+    }
+
+    // ── Create Overlay DOM ────────────────────────
+    function createOverlay() {
+        if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) {
+            const deadOverlay = document.getElementById(OVERLAY_ID);
+            if (deadOverlay) deadOverlay.remove();
+            return;
+        }
+
+        if (document.getElementById(OVERLAY_ID)) return;
+
+        const overlay = document.createElement('div');
+        overlay.id = OVERLAY_ID;
+
+        overlay.innerHTML = `
+      <div class="zd-drag-handle" title="Drag to Move">
+        <span></span><span></span><span></span>
       </div>
-      <div class="ztk-divider"></div>
-
-      <!-- Red: Open -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: Open Ticket" id="ztk-wrap-open">
-        <button class="ztk-btn ztk-btn-red" id="ztk-btn-open" data-type="open" title=""></button>
-        <span class="ztk-count" id="ztk-count-open">0</span>
-        <span class="ztk-btn-label">Open</span>
+      <div id="zd-current-ticket"><span class="zd-ticket-none">None</span></div>
+      <div id="zd-issue-preview-container"></div>
+      <div class="zd-buttons">
+        <button class="zd-btn btn-pending" data-type="open" title="Open Ticket">Open</button>
+        <button class="zd-btn btn-updates" data-type="new" title="New Ticket">New</button>
+        <button class="zd-btn btn-compliance" data-type="compliance" title="Compliance">Comp</button>
+        <button class="zd-btn btn-escalations" data-type="escalation" title="Escalation">Esc</button>
+        <button class="zd-btn btn-closed" data-type="closed" title="Closed">Clsd</button>
+        <button class="zd-btn btn-remove-all" data-type="removeAll" title="Remove Ticket From All Groups">X</button>
       </div>
 
-      <!-- Yellow: New -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: New Ticket" id="ztk-wrap-new">
-        <button class="ztk-btn ztk-btn-yellow" id="ztk-btn-new" data-type="new" title=""></button>
-        <span class="ztk-count" id="ztk-count-new">0</span>
-        <span class="ztk-btn-label">New</span>
-      </div>
-
-      <!-- Blue: Team -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: Team Ticket" id="ztk-wrap-team">
-        <button class="ztk-btn ztk-btn-blue" id="ztk-btn-team" data-type="team" title=""></button>
-        <span class="ztk-count" id="ztk-count-team">0</span>
-        <span class="ztk-btn-label">Team</span>
-      </div>
-
-      <!-- Green: Compliance -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: Compliance" id="ztk-wrap-compliance">
-        <button class="ztk-btn ztk-btn-green" id="ztk-btn-compliance" data-type="compliance" title=""></button>
-        <span class="ztk-count" id="ztk-count-compliance">0</span>
-        <span class="ztk-btn-label">Cmpl</span>
-      </div>
-
-      <!-- Brown: Escalation -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: Escalation" id="ztk-wrap-escalation">
-        <button class="ztk-btn ztk-btn-brown" id="ztk-btn-escalation" data-type="escalation" title=""></button>
-        <span class="ztk-count" id="ztk-count-escalation">0</span>
-        <span class="ztk-btn-label">Esc</span>
-      </div>
-
-      <!-- Gray: Closed -->
-      <div class="ztk-btn-wrap" data-tip="Double-click: Closed Ticket" id="ztk-wrap-closed">
-        <button class="ztk-btn ztk-btn-gray" id="ztk-btn-closed" data-type="closed" title=""></button>
-        <span class="ztk-count" id="ztk-count-closed">0</span>
-        <span class="ztk-btn-label">Close</span>
-      </div>
-
-      <div class="ztk-divider"></div>
-      
-      <!-- Telegram Note Button -->
-      <div class="ztk-btn-wrap ztk-note-wrap" data-tip="Send Note" id="ztk-wrap-note">
-        <button class="ztk-btn ztk-btn-note" id="ztk-btn-note">
-          <svg viewBox="0 0 24 24"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+      <!-- Telegram Note Button & Container -->
+      <div class="ztk-btn-wrap ztk-note-wrap" style="width:100%; margin-top:2px;" id="ztk-wrap-note">
+        <button class="zd-btn ztk-btn-note" id="ztk-btn-note" title="Send Telegram Note" style="background: radial-gradient(circle at 35% 35%, #9b59b6, #8e44ad); margin-top:0;">
+          <svg viewBox="0 0 24 24" style="width:14px; height:14px; fill:none; stroke:#fff; stroke-width:2.5;"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
         </button>
-        
-        <!-- Expandable Note Input -->
         <div id="ztk-note-container">
           <textarea id="ztk-note-input" placeholder="Type a note..." rows="1"></textarea>
           <button id="ztk-note-send" title="Send">
@@ -90,326 +233,130 @@
           </button>
         </div>
       </div>
-
-      <div class="ztk-divider"></div>
-      <div id="ztk-daily-total">Today <span id="ztk-total-num">0</span></div>
-
-      <!-- Warning toast for missing ticket number -->
-      <div id="ztk-warning-toast"></div>
     `;
 
-        return widget;
-    }
+        document.body.appendChild(overlay);
+        makeElementDraggable(overlay);
 
-    // ── Apply counting visibility ─────────────────
-    function applyCountingState(widget, enabled) {
-        if (enabled) {
-            widget.classList.remove('ztk-counts-hidden');
-        } else {
-            widget.classList.add('ztk-counts-hidden');
-        }
-    }
+        // ── Telegram Note Handler ──
+        const noteBtn = overlay.querySelector('#ztk-btn-note');
+        const noteContainer = overlay.querySelector('#ztk-note-container');
+        const noteInput = overlay.querySelector('#ztk-note-input');
+        const noteSendBtn = overlay.querySelector('#ztk-note-send');
 
-    // ── Update daily total on widget ──────────────
-    function updateWidgetTotal(totals) {
-        const totalEl = document.getElementById('ztk-total-num');
-        if (totalEl && totals) {
-            const sum = (totals.open || 0) + (totals.new || 0) + (totals.team || 0) +
-                        (totals.compliance || 0) + (totals.escalation || 0) + (totals.closed || 0);
-            totalEl.textContent = sum;
-        }
-    }
-
-    // ── Pulse animation on button ─────────────────
-    function triggerPulse(btn) {
-        btn.classList.remove('ztk-pulsing');
-        void btn.offsetWidth; // force reflow
-        btn.classList.add('ztk-pulsing');
-        btn.addEventListener('animationend', () => {
-            btn.classList.remove('ztk-pulsing');
-        }, { once: true });
-    }
-
-    // ── Floating +1 feedback label ────────────────
-    const FLOAT_COLOR_MAP = {
-        open: 'red', new: 'yellow', team: 'blue',
-        compliance: 'green', escalation: 'brown', closed: 'gray'
-    };
-
-    function spawnFloatLabel(btn, type) {
-        const rect = btn.getBoundingClientRect();
-        const label = document.createElement('div');
-        label.className = `ztk-float-label ztk-float-${FLOAT_COLOR_MAP[type] || 'blue'}`;
-        label.textContent = '+1';
-        // Center the label over the button (28px font, roughly 28px wide)
-        label.style.left = `${rect.left + rect.width / 2 - 18}px`;
-        label.style.top = `${rect.top - 14}px`;
-        document.body.appendChild(label);
-        label.addEventListener('animationend', () => label.remove());
-    }
-
-    // ── Extract ticket number from Zendesk URL ───
-    function extractTicketNumber() {
-        const url = window.location.href;
-        const match = url.match(/\/tickets\/(\d+)/);
-        return match ? match[1] : null;
-    }
-
-    // ── Show warning toast on widget ─────────────
-    function showWidgetWarning(msg) {
-        const toast = document.getElementById('ztk-warning-toast');
-        if (!toast) return;
-        toast.textContent = msg;
-        toast.classList.add('ztk-show');
-        setTimeout(() => toast.classList.remove('ztk-show'), 3000);
-    }
-
-    // ── Handle double-click recording ────────────
-    function handleClick(btn, type) {
-        clickCounts[type] = (clickCounts[type] || 0) + 1;
-
-        if (clickTimers[type]) {
-            clearTimeout(clickTimers[type]);
-            clickTimers[type] = null;
-        }
-
-        if (clickCounts[type] >= 2) {
-            // Double-click detected — extract ticket number first
-            clickCounts[type] = 0;
-
-            const ticketNumber = extractTicketNumber();
-            if (!ticketNumber) {
-                showWidgetWarning('⚠ No ticket number found in URL!');
-                return;
-            }
-
-            triggerPulse(btn);
-            spawnFloatLabel(btn, type);
-            chrome.runtime.sendMessage({ action: 'ADD_EVENT', type, ticketNumber }, (response) => {
-                if (response && response.success) {
-                    updateWidgetTotal(response.totals);
-                    // Update the specific badge count
-                    const badgeEl = document.getElementById(`ztk-count-${type}`);
-                    if (badgeEl) badgeEl.textContent = response.totals[type] || 0;
-                }
-            });
-        } else {
-            // Wait for potential second click
-            clickTimers[type] = setTimeout(() => {
-                clickCounts[type] = 0;
-                clickTimers[type] = null;
-            }, DOUBLE_CLICK_DELAY);
-        }
-    }
-
-    // ── Logo double-click: toggle horizontal / vertical layout ───────────
-    function handleLogoClick() {
-        logoClicks++;
-        if (logoTimer) clearTimeout(logoTimer);
-
-        if (logoClicks >= 2) {
-            logoClicks = 0;
-            isHorizontal = !isHorizontal;
-            const widget = document.getElementById(WIDGET_ID);
-            if (widget) widget.classList.toggle('ztk-horizontal', isHorizontal);
-        } else {
-            logoTimer = setTimeout(() => { logoClicks = 0; }, DOUBLE_CLICK_DELAY);
-        }
-    }
-
-    // ── Drag Logic ────────────────────────────────
-    function initDrag(widget) {
-        widget.addEventListener('mousedown', (e) => {
-            // Don't drag if clicking a button
-            if (e.target.classList.contains('ztk-btn')) return;
-            isDragging = true;
-            const rect = widget.getBoundingClientRect();
-            dragOffset.x = e.clientX - rect.left;
-            dragOffset.y = e.clientY - rect.top;
-            widget.style.transition = 'none';
-            widget.style.transform = 'none';
-            widget.style.top = `${rect.top}px`;
-            widget.style.bottom = 'auto'; // clear any bottom anchor (e.g. from horizontal mode)
-            widget.style.right = 'auto';
-            widget.style.left = `${rect.left}px`;
-            e.preventDefault();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (!isDragging) return;
-            const x = e.clientX - dragOffset.x;
-            const y = e.clientY - dragOffset.y;
-            widget.style.left = `${Math.max(0, Math.min(x, window.innerWidth - widget.offsetWidth))}px`;
-            widget.style.top = `${Math.max(0, Math.min(y, window.innerHeight - widget.offsetHeight))}px`;
-        });
-
-        document.addEventListener('mouseup', () => {
-            isDragging = false;
-        });
-    }
-
-    // ── Inject Widget ─────────────────────────────
-    function injectWidget() {
-        if (document.getElementById(WIDGET_ID)) return;
-        const widget = buildWidget();
-        document.body.appendChild(widget);
-
-        // Read settings and apply counting state
-        chrome.runtime.sendMessage({ action: 'GET_STATS' }, (response) => {
-            if (response) {
-                applyCountingState(widget, response.countingEnabled !== false);
-                updateWidgetTotal(response.today);
-
-                // Also update individual badge counts for today
-                if (response.today) {
-                    ['open', 'new', 'team', 'compliance', 'escalation', 'closed'].forEach(t => {
-                        const el = document.getElementById(`ztk-count-${t}`);
-                        if (el) el.textContent = response.today[t] || 0;
-                    });
-                }
-            }
-        });
-
-        // Logo double-click → collapse/expand
-        const logo = document.getElementById('ztk-logo');
-        if (logo) {
-            logo.addEventListener('click', (e) => {
-                e.stopPropagation();
-                handleLogoClick();
-            });
-        }
-
-        // Ticket button click handlers
-        ['open', 'new', 'team', 'compliance', 'escalation', 'closed'].forEach(type => {
-            const btn = document.getElementById(`ztk-btn-${type}`);
-            if (btn) {
-                btn.addEventListener('click', (e) => {
-                    e.stopPropagation();
-                    handleClick(btn, type);
-                });
-            }
-        });
-
-        // ── Telegram Note Logic ──────────────────
-        const noteBtn = document.getElementById('ztk-btn-note');
-        const noteContainer = document.getElementById('ztk-note-container');
-        const noteInput = document.getElementById('ztk-note-input');
-        const noteSendBtn = document.getElementById('ztk-note-send');
-
-        if (noteBtn && noteContainer && noteInput && noteSendBtn) {
+        if (noteBtn && noteContainer) {
             noteBtn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const isOpen = noteContainer.classList.contains('ztk-show');
-                if (isOpen) {
-                    noteContainer.classList.remove('ztk-show');
-                } else {
-                    noteContainer.classList.add('ztk-show');
-                    noteInput.value = '';
+                noteContainer.classList.toggle('ztk-show');
+                if (noteContainer.classList.contains('ztk-show')) {
                     noteInput.focus();
                 }
             });
 
-            // Hide note input when clicking outside
             document.addEventListener('click', (e) => {
-                if (!noteContainer.contains(e.target) && e.target !== noteBtn && !noteBtn.contains(e.target)) {
+                if (noteContainer.classList.contains('ztk-show') && !noteContainer.contains(e.target) && !noteBtn.contains(e.target)) {
                     noteContainer.classList.remove('ztk-show');
                 }
             });
 
-            // Prevent drag from closing the widget input
-            noteContainer.addEventListener('mousedown', (e) => e.stopPropagation());
-
-            // Prevent Zendesk page from intercepting keyboard events in the note input
-            // (Zendesk uses keyboard shortcuts that steal focus and block symbols like # @ !)
-            ['keydown', 'keyup', 'keypress'].forEach(evt => {
-                noteInput.addEventListener(evt, (e) => {
-                    e.stopPropagation();
-                });
-            });
-
-            // Auto-expand textarea
-            noteInput.addEventListener('input', () => {
-                noteInput.style.height = '36px'; // reset
-                noteInput.style.height = Math.min(noteInput.scrollHeight, 120) + 'px';
-            });
-
-            // Send note function
             const sendNote = () => {
                 const text = noteInput.value.trim();
                 if (!text) return;
+                const ticketId = getTicketIdFromPage();
+                const ticketUrl = window.location.href;
 
-                // Prepend current Zendesk ticket URL context if helpful
-                const url = window.location.href;
-                const finalNote = `📝 **Zendesk Note**\n\n${text}\n\n🔗 [View Ticket](${url})`;
+                let messageText = `📝 **Zendesk Note**\n${text}`;
+                if (ticketId) {
+                    messageText = `📝 **Zendesk Note** (#${ticketId})\n${text}\n\n🔗 [View Ticket](${ticketUrl})`;
+                }
 
                 noteSendBtn.classList.add('ztk-loading');
-                noteInput.disabled = true;
-
-                chrome.runtime.sendMessage({ action: 'SEND_TELEGRAM_NOTE', text: finalNote }, (response) => {
+                chrome.runtime.sendMessage({ action: 'SEND_TELEGRAM_NOTE', text: messageText }, (response) => {
                     noteSendBtn.classList.remove('ztk-loading');
-                    noteInput.disabled = false;
-                    
                     if (response && response.success) {
+                        noteInput.value = '';
                         noteContainer.classList.remove('ztk-show');
-                        triggerPulse(noteBtn); // Visual success feedback
+                        showToastNotification('✓ Telegram note sent!', 'add', 'compliance');
                     } else {
-                        // Show error briefly in input
-                        const origValue = noteInput.value;
-                        noteInput.value = response?.error || 'Failed to send...';
-                        noteInput.style.color = '#ff6b6b';
-                        setTimeout(() => {
-                            noteInput.value = origValue;
-                            noteInput.style.color = '#fff';
-                            noteInput.focus();
-                        }, 2000);
+                        showToastNotification(`⚠ ${response?.error || 'Failed to send note'}`, 'remove', '');
                     }
                 });
             };
 
-            // Send on Enter (Shift+Enter for new line)
+            noteSendBtn.addEventListener('click', sendNote);
             noteInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault(); // prevent new line
+                    e.preventDefault();
                     sendNote();
                 }
             });
+        }
 
-            // Send on button click
-            noteSendBtn.addEventListener('click', (e) => {
-                e.stopPropagation();
-                sendNote();
+        // ── Category Action Buttons ──
+        overlay.querySelectorAll('.zd-btn[data-type]').forEach(button => {
+            button.addEventListener('click', () => {
+                if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) {
+                    const deadOverlay = document.getElementById(OVERLAY_ID);
+                    if (deadOverlay) deadOverlay.remove();
+                    showToastNotification("Extension reloaded. Re-clicking will sync!", 'remove', '');
+                    return;
+                }
+
+                const type = button.getAttribute('data-type');
+                const labelName = button.innerText;
+                const ticketId = getTicketIdFromPage();
+
+                if (!ticketId) {
+                    showToastNotification("No active ticket found in URL or tab!", 'remove', '');
+                    return;
+                }
+
+                if (type === 'removeAll') {
+                    showToastNotification(`Cleared Ticket #${ticketId}`, 'remove', '');
+                    return;
+                }
+
+                // Send ADD_EVENT message to background
+                chrome.runtime.sendMessage({ action: 'ADD_EVENT', type, ticketNumber: ticketId }, (response) => {
+                    if (response && response.success) {
+                        // Store to masterLogHistory & ticketPayeeIssues for Excel/Inspectors
+                        chrome.storage.local.get(['masterLogHistory', 'ticketPayeeIssues'], (res) => {
+                            let masterLogHistory = res.masterLogHistory || [];
+                            let ticketPayeeIssues = res.ticketPayeeIssues || {};
+                            const nowString = new Date().toISOString();
+
+                            masterLogHistory.push({
+                                ticketId: ticketId,
+                                category: type,
+                                timestamp: nowString
+                            });
+
+                            const payeeIssueVal = scrapeLivePayeeIssue();
+                            if (payeeIssueVal !== "-") {
+                                ticketPayeeIssues[ticketId] = payeeIssueVal;
+                            }
+
+                            chrome.storage.local.set({ masterLogHistory, ticketPayeeIssues }, () => {
+                                showToastNotification(`Recorded Ticket #${ticketId} as ${labelName}!`, 'add', type);
+                            });
+                        });
+                    } else {
+                        showToastNotification('Failed to record event', 'remove', '');
+                    }
+                });
             });
-        }
-
-        initDrag(widget);
-    }
-
-    // ── Listen for counting toggle from storage changes ─────
-    chrome.storage.onChanged.addListener((changes, namespace) => {
-        if (namespace === 'local' && changes.countingEnabled !== undefined) {
-            const widget = document.getElementById(WIDGET_ID);
-            if (widget) applyCountingState(widget, changes.countingEnabled.newValue !== false);
-        }
-    });
-
-    // ── Watch for SPA navigation (Zendesk is a SPA) ──
-    function watchNavigation() {
-        const observer = new MutationObserver(() => {
-            if (!document.getElementById(WIDGET_ID)) {
-                injectWidget();
-            }
         });
-        observer.observe(document.body, { childList: true, subtree: false });
     }
 
-    // ── Init ──────────────────────────────────────
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', () => {
-            injectWidget();
-            watchNavigation();
-        });
-    } else {
-        injectWidget();
-        watchNavigation();
-    }
+    // ── Run Loop ──────────────────────────────────
+    setInterval(() => {
+        if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) {
+            const deadOverlay = document.getElementById(OVERLAY_ID);
+            if (deadOverlay) deadOverlay.remove();
+            return;
+        }
+        createOverlay();
+        refreshOverlayDisplay();
+    }, 1000);
+
 })();

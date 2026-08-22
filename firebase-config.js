@@ -182,6 +182,8 @@ function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
     fields: {
       dailyTotalsJson: { stringValue: JSON.stringify(dailyTotals) },
       ticketLogJson:   { stringValue: JSON.stringify(ticketLog || []) },
+      masterLogHistoryJson: { stringValue: JSON.stringify(settings.masterLogHistory || []) },
+      ticketPayeeIssuesJson: { stringValue: JSON.stringify(settings.ticketPayeeIssues || {}) },
       agentName: { stringValue: settings.agentName || '' },
       theme: { stringValue: settings.theme || 'dark' },
       countingEnabled: { booleanValue: settings.countingEnabled !== false },
@@ -195,12 +197,14 @@ function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
  */
 function fromFirestoreDoc(doc) {
   if (!doc || !doc.fields) {
-    return { dailyTotals: {}, ticketLog: [], agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
+    return { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
   }
 
   const f = doc.fields;
   let dailyTotals = {};
   let ticketLog = [];
+  let masterLogHistory = [];
+  let ticketPayeeIssues = {};
 
   try {
     dailyTotals = JSON.parse(f.dailyTotalsJson?.stringValue || '{}');
@@ -214,9 +218,23 @@ function fromFirestoreDoc(doc) {
     console.warn('[ZTK Firebase] Failed to parse ticketLog from Firestore:', e.message);
   }
 
+  try {
+    masterLogHistory = JSON.parse(f.masterLogHistoryJson?.stringValue || '[]');
+  } catch (e) {
+    console.warn('[ZTK Firebase] Failed to parse masterLogHistory from Firestore:', e.message);
+  }
+
+  try {
+    ticketPayeeIssues = JSON.parse(f.ticketPayeeIssuesJson?.stringValue || '{}');
+  } catch (e) {
+    console.warn('[ZTK Firebase] Failed to parse ticketPayeeIssues from Firestore:', e.message);
+  }
+
   return {
     dailyTotals,
     ticketLog,
+    masterLogHistory,
+    ticketPayeeIssues,
     agentName: f.agentName?.stringValue || '',
     theme: f.theme?.stringValue || 'dark',
     countingEnabled: f.countingEnabled?.booleanValue !== false,

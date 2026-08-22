@@ -32,7 +32,7 @@ let lastCloudSyncTime = 0;
 async function getLocal() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['events', 'dailyTotals', 'ticketLog', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId'],
+      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId'],
       (result) => {
         if (chrome.runtime.lastError) {
           console.error('[ZTK] Failed to read local storage:', chrome.runtime.lastError.message);
@@ -40,6 +40,8 @@ async function getLocal() {
             events: [],
             dailyTotals: {},
             ticketLog: [],
+            masterLogHistory: [],
+            ticketPayeeIssues: {},
             agentName: '',
             countingEnabled: true,
             theme: 'dark',
@@ -52,6 +54,8 @@ async function getLocal() {
           events: result.events ?? [],
           dailyTotals: result.dailyTotals ?? {},
           ticketLog: result.ticketLog ?? [],
+          masterLogHistory: result.masterLogHistory ?? [],
+          ticketPayeeIssues: result.ticketPayeeIssues ?? {},
           agentName: result.agentName ?? '',
           countingEnabled: result.countingEnabled !== false, // default true
           theme: result.theme ?? 'dark',
@@ -226,6 +230,8 @@ async function saveAll(data) {
     try {
       const localData = await getLocal();
       await syncToCloud(data.dailyTotals, data.ticketLog ?? localData.ticketLog, {
+        masterLogHistory: data.masterLogHistory ?? localData.masterLogHistory,
+        ticketPayeeIssues: data.ticketPayeeIssues ?? localData.ticketPayeeIssues,
         agentName: data.agentName ?? localData.agentName,
         theme: data.theme ?? localData.theme,
         countingEnabled: data.countingEnabled ?? localData.countingEnabled
@@ -361,10 +367,13 @@ async function getStats() {
     theme: data.theme,
     tgToken: data.tgToken,
     tgChatId: data.tgChatId,
-    user, // { uid, email, displayName, photoUrl } or null
-    lastEvent: data.events.length > 0 ? data.events[data.events.length - 1] : null,
+    lastEvent: data.events.length ? data.events[data.events.length - 1] : null,
+    dailyTotals: dt,
     todayKey: todayKey(),
-    dailyTotals: dt   // expose so popup can check which days have data
+    ticketLog: data.ticketLog,
+    masterLogHistory: data.masterLogHistory,
+    ticketPayeeIssues: data.ticketPayeeIssues,
+    user
   };
 }
 
@@ -857,6 +866,16 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case 'GET_DETAILED_STATS':
           sendResponse(await getDetailedStats(msg.range, msg.dateParam));
+          break;
+        case 'WIPE_DATA':
+          await saveLocal({
+            events: [],
+            dailyTotals: {},
+            ticketLog: [],
+            masterLogHistory: [],
+            ticketPayeeIssues: {}
+          });
+          sendResponse({ success: true });
           break;
         // ── Auth actions ──
         case 'SIGN_IN':

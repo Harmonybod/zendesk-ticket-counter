@@ -10,6 +10,29 @@
 
 <body>
 
+  <!-- ═══ SVG ICON DEFINITIONS ═══ -->
+  <svg style="display:none;" xmlns="http://www.w3.org/2000/svg">
+    <symbol id="icon-settings" viewBox="0 0 24 24"><path d="M12 15a3 3 0 100-6 3 3 0 000 6z"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></symbol>
+    <symbol id="icon-chart" viewBox="0 0 24 24"><path d="M18 20V10"/><path d="M12 20V4"/><path d="M6 20v-6"/></symbol>
+    <symbol id="icon-trophy" viewBox="0 0 24 24"><path d="M6 9H4.5a2.5 2.5 0 010-5H6"/><path d="M18 9h1.5a2.5 2.5 0 000-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0012 0V2z"/></symbol>
+    <symbol id="icon-calendar" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></symbol>
+    <symbol id="icon-graph" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></symbol>
+    <symbol id="icon-database" viewBox="0 0 24 24"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"/><path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/></symbol>
+    <symbol id="icon-file" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></symbol>
+    <symbol id="icon-trash" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></symbol>
+    <symbol id="icon-export" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></symbol>
+    <symbol id="icon-import" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></symbol>
+    <symbol id="icon-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></symbol>
+    <symbol id="icon-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></symbol>
+    <symbol id="icon-x" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></symbol>
+    <symbol id="icon-star" viewBox="0 0 24 24"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></symbol>
+    <symbol id="icon-users" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></symbol>
+    <symbol id="icon-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></symbol>
+  </svg>
+
   <!-- ── Auth Screen (shown when not signed in) ── -->
   <div class="auth-screen" id="auth-screen" aria-hidden="true">
     <div class="auth-card">
@@ -263,6 +286,274 @@
         </button>
       </div>
     </footer>
+
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+    <!-- PREMIUM ANALYTICS SECTIONS                                        -->
+    <!-- ═══════════════════════════════════════════════════════════════════ -->
+
+    <!-- ── Shift Setup & Configuration ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-primary"><svg><use href="#icon-settings"/></svg></span>
+        Shift Setup &amp; Configuration
+      </h3>
+    </div>
+    <div class="section-box">
+      <div class="shift-input-grid">
+        <div>
+          <label for="shift-type-input">Shift Type</label>
+          <select id="shift-type-input">
+            <option value="Day">Day Shift</option>
+            <option value="Night">Night Shift</option>
+            <option value="Weekend">Weekend Shift</option>
+          </select>
+        </div>
+        <div>
+          <label for="shift-start-input">Starting Time</label>
+          <input type="time" id="shift-start-input" />
+        </div>
+      </div>
+      <div class="shift-input-grid">
+        <div>
+          <label for="shift-end-input">End Time</label>
+          <input type="time" id="shift-end-input" />
+        </div>
+        <div class="remarks-row">
+          <label for="shift-remarks-input">Remarks</label>
+          <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
+        </div>
+      </div>
+    </div>
+
+    <!-- ── All-Time Personal Leaderboard ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-warning"><svg><use href="#icon-trophy"/></svg></span>
+        All-Time Personal Leaderboard
+      </h3>
+    </div>
+    <div class="section-box">
+      <div class="records-grid">
+        <div class="record-sub-card" id="rankCard-0">
+          <div class="record-val" id="rankVal-0">0</div>
+          <div class="record-date" id="rankDate-0">--/--/--</div>
+          <div class="record-lbl"><span class="badge-gold">#1</span> 1st PLACE</div>
+        </div>
+        <div class="record-sub-card" id="rankCard-1">
+          <div class="record-val" id="rankVal-1">0</div>
+          <div class="record-date" id="rankDate-1">--/--/--</div>
+          <div class="record-lbl"><span class="badge-silver">#2</span> 2nd PLACE</div>
+        </div>
+        <div class="record-sub-card" id="rankCard-2">
+          <div class="record-val" id="rankVal-2">0</div>
+          <div class="record-date" id="rankDate-2">--/--/--</div>
+          <div class="record-lbl"><span class="badge-bronze">#3</span> 3rd PLACE</div>
+        </div>
+        <div class="record-sub-card" id="rankCard-3">
+          <div class="record-val" id="rankVal-3">0</div>
+          <div class="record-date" id="rankDate-3">--/--/--</div>
+          <div class="record-lbl"><span class="badge-iron">#4</span> 4th PLACE</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Calendar Archive Inspector ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-primary"><svg><use href="#icon-calendar"/></svg></span>
+        Calendar Archive Inspector
+      </h3>
+    </div>
+    <div class="section-box">
+      <div class="calendar-wrapper">
+        <div class="cal-input-container">
+          <label for="mini-calendar-picker">Select Date to Audit</label>
+          <input type="date" id="mini-calendar-picker" />
+        </div>
+        <div class="cal-results-box" id="calendar-results-box">
+          <div class="cal-summary-text" style="font-style: italic; text-align: center;">
+            Pick a date to audit historical shifts...
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Performance History Analysis ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-purple"><svg><use href="#icon-graph"/></svg></span>
+        Performance History Analysis
+      </h3>
+    </div>
+    <div class="section-box">
+      <table class="analysis-table">
+        <thead>
+          <tr>
+            <th>Timeframe</th>
+            <th>Open</th>
+            <th>New</th>
+            <th>Team</th>
+            <th>Cmpl</th>
+            <th>Esc</th>
+            <th>Clsd</th>
+            <th style="color: var(--green);">Total</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr class="clickable-row active-selected-row" id="row-today" data-period="today">
+            <td><strong>Today <span class="live-dot"></span></strong></td>
+            <td id="pa-t-open">0</td><td id="pa-t-new">0</td><td id="pa-t-team">0</td>
+            <td id="pa-t-cmpl">0</td><td id="pa-t-esc">0</td><td id="pa-t-clsd">0</td>
+            <td id="pa-t-total" style="font-weight:700; color: var(--green);">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last7" data-period="last7">
+            <td><strong>Last 7 Days</strong></td>
+            <td id="pa-7-open">0</td><td id="pa-7-new">0</td><td id="pa-7-team">0</td>
+            <td id="pa-7-cmpl">0</td><td id="pa-7-esc">0</td><td id="pa-7-clsd">0</td>
+            <td id="pa-7-total" style="font-weight:700;">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last15" data-period="last15">
+            <td><strong>Last 15 Days</strong></td>
+            <td id="pa-15-open">0</td><td id="pa-15-new">0</td><td id="pa-15-team">0</td>
+            <td id="pa-15-cmpl">0</td><td id="pa-15-esc">0</td><td id="pa-15-clsd">0</td>
+            <td id="pa-15-total" style="font-weight:700;">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last30" data-period="last30">
+            <td><strong>Last 30 Days</strong></td>
+            <td id="pa-30-open">0</td><td id="pa-30-new">0</td><td id="pa-30-team">0</td>
+            <td id="pa-30-cmpl">0</td><td id="pa-30-esc">0</td><td id="pa-30-clsd">0</td>
+            <td id="pa-30-total" style="font-weight:700;">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last3m" data-period="last3m">
+            <td><strong>Last 3 Months</strong></td>
+            <td id="pa-3m-open">0</td><td id="pa-3m-new">0</td><td id="pa-3m-team">0</td>
+            <td id="pa-3m-cmpl">0</td><td id="pa-3m-esc">0</td><td id="pa-3m-clsd">0</td>
+            <td id="pa-3m-total" style="font-weight:700;">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last6m" data-period="last6m">
+            <td><strong>Last 6 Months</strong></td>
+            <td id="pa-6m-open">0</td><td id="pa-6m-new">0</td><td id="pa-6m-team">0</td>
+            <td id="pa-6m-cmpl">0</td><td id="pa-6m-esc">0</td><td id="pa-6m-clsd">0</td>
+            <td id="pa-6m-total" style="font-weight:700;">0</td>
+          </tr>
+          <tr class="clickable-row" id="row-last1y" data-period="last1y">
+            <td><strong>Last 1 Year</strong></td>
+            <td id="pa-1y-open">0</td><td id="pa-1y-new">0</td><td id="pa-1y-team">0</td>
+            <td id="pa-1y-cmpl">0</td><td id="pa-1y-esc">0</td><td id="pa-1y-clsd">0</td>
+            <td id="pa-1y-total" style="font-weight:700;">0</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <!-- Ratio Breakdown + Efficiency + Pacing -->
+      <div class="expandable-panel" id="ratio-panel">
+        <div class="pro-title">
+          <span id="ratio-panel-title">
+            <span class="icon icon-warning icon-sm"><svg><use href="#icon-info"/></svg></span>
+            TODAY'S RATIO BREAKDOWN
+          </span>
+          <span id="efficiency-score" style="color: var(--green);">Efficiency: Waiting...</span>
+        </div>
+        <div class="progress-wrapper">
+          <div id="bar-open" class="progress-bar" style="background-color: var(--red);"></div>
+          <div id="bar-new" class="progress-bar" style="background-color: var(--yellow);"></div>
+          <div id="bar-team" class="progress-bar" style="background-color: var(--blue);"></div>
+          <div id="bar-cmpl" class="progress-bar" style="background-color: var(--green);"></div>
+          <div id="bar-esc" class="progress-bar" style="background-color: var(--brown);"></div>
+          <div id="bar-clsd" class="progress-bar" style="background-color: var(--gray);"></div>
+        </div>
+        <div class="ratio-legend">
+          <span><span class="icon icon-sm" style="color: var(--red);"><svg><use href="#icon-check"/></svg></span> Open</span>
+          <span><span class="icon icon-sm" style="color: var(--yellow);"><svg><use href="#icon-check"/></svg></span> New</span>
+          <span><span class="icon icon-sm" style="color: var(--blue);"><svg><use href="#icon-check"/></svg></span> Team</span>
+          <span><span class="icon icon-sm" style="color: var(--green);"><svg><use href="#icon-check"/></svg></span> Cmpl</span>
+          <span><span class="icon icon-sm" style="color: var(--brown);"><svg><use href="#icon-check"/></svg></span> Esc</span>
+          <span><span class="icon icon-sm" style="color: var(--gray);"><svg><use href="#icon-check"/></svg></span> Clsd</span>
+        </div>
+
+        <!-- Hourly Pacing -->
+        <div id="hourly-pacing-section">
+          <div class="pro-title" style="margin-top:14px; margin-bottom: 2px; font-size: 10px; color: var(--accent);">
+            <span class="icon icon-sm" style="color: var(--accent);"><svg><use href="#icon-clock"/></svg></span>
+            LIVE HOURLY PACING TIMELINE
+          </div>
+          <div class="hourly-graph-container" id="hourly-graph-container"></div>
+        </div>
+
+        <!-- Ticket Inspector -->
+        <div class="inspector-container">
+          <div class="inspector-title">
+            <span class="icon icon-sm" style="color: var(--accent);"><svg><use href="#icon-search"/></svg></span>
+            LOGGED TICKET HISTORY (Click to Copy)
+          </div>
+          <div class="inspector-scroll-box" id="inspector-badges-box">
+            <span style="color: var(--text-2); font-style: italic;">Select a timeframe to inspect ticket history...</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Security PIN Panel -->
+      <div class="sec-panel" id="security-pin-panel">
+        <div class="sec-title">
+          <span class="icon icon-sm" style="color: var(--red);"><svg><use href="#icon-lock"/></svg></span>
+          SECURITY VERIFICATION REQUIRED
+        </div>
+        <div id="pin-input-container">
+          <input type="password" id="security-pin-input" maxlength="4" placeholder="Enter 4-Digit PIN..." />
+        </div>
+        <div class="sec-buttons" id="security-confirm-buttons" style="display: none;">
+          <button class="sec-btn sec-btn-yes" id="btn-confirm-wipe">Yes, Erase Everything</button>
+          <button class="sec-btn sec-btn-no" id="btn-cancel-wipe">Cancel</button>
+        </div>
+        <button class="sec-panel-close" id="btn-close-security">Close</button>
+      </div>
+    </div>
+
+    <!-- ── Milestones & Insights ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-warning"><svg><use href="#icon-star"/></svg></span>
+        Milestones &amp; Insights
+      </h3>
+    </div>
+    <div class="section-box" style="padding: 6px;">
+      <div class="achievement-box" id="insights-box">
+        Analyzing data rows... Keep working hard to unlock executive achievements!
+      </div>
+    </div>
+
+    <!-- ── Data Portability Center ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-primary"><svg><use href="#icon-database"/></svg></span>
+        Data Portability Center (Backup &amp; Restore)
+      </h3>
+    </div>
+    <div class="section-box">
+      <div class="port-btn-container">
+        <button id="backup-export-btn" class="btn-port">
+          <span class="icon icon-sm icon-success"><svg><use href="#icon-export"/></svg></span>
+          Export JSON Backup
+        </button>
+        <button id="backup-import-btn" class="btn-port">
+          <span class="icon icon-sm icon-primary"><svg><use href="#icon-import"/></svg></span>
+          Import JSON Data
+        </button>
+      </div>
+      <input type="file" id="backup-import-file" accept=".json" style="display: none;" />
+    </div>
+
+    <!-- ── Generate Excel & Clear ── -->
+    <div class="main-actions-row">
+      <button id="generate-excel-btn" class="btn-main-action btn-generate-excel">
+        <span class="icon icon-sm" style="color: white;"><svg><use href="#icon-file"/></svg></span>
+        Generate Excel File
+      </button>
+      <button id="clear-data-btn" class="btn-main-action btn-clear-data">
+        <span class="icon icon-sm" style="color: white;"><svg><use href="#icon-trash"/></svg></span>
+        Clear
+      </button>
+    </div>
 
   </div><!-- /app-main -->
 

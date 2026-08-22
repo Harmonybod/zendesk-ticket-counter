@@ -676,4 +676,234 @@
   to { transform: rotate(360deg); }
 }
 
-/* Note button is always visible in horizontal mode — no special hide rule needed */
+/* ══════════════════════════════════════════════════════════════════════════
+   PREMIUM SLENDER FLOATING OVERLAY MENUBAR
+   ══════════════════════════════════════════════════════════════════════════ */
+
+#zd-tracker-overlay {
+  position: fixed;
+  top: 160px;
+  left: 72px;
+  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  color: #f8fafc;
+  z-index: 99999999;
+  font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  padding: 10px 4px;
+  border-radius: 12px;
+  box-sizing: border-box;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  backdrop-filter: blur(10px);
+  
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 54px;
+  resize: vertical;
+  overflow: hidden;
+  min-height: 250px;
+  max-height: 800px;
+  height: 350px;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.zd-drag-handle {
+  width: 20px;
+  height: 10px;
+  cursor: move;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  flex-shrink: 0;
+  opacity: 0.6;
+  transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.zd-drag-handle:hover {
+  opacity: 1;
+  transform: scale(1.05);
+}
+
+.zd-drag-handle span {
+  display: block;
+  height: 2px;
+  background: linear-gradient(90deg, #38bdf8, #a855f7);
+  border-radius: 2px;
+  width: 100%;
+}
+
+#zd-current-ticket {
+  width: 100%;
+  text-align: center;
+  flex-shrink: 0;
+  padding-bottom: 2px;
+}
+
+.zd-ticket-badge {
+  display: block;
+  font-size: 9px;
+  font-weight: 800;
+  color: #0f172a !important;
+  background: linear-gradient(45deg, #fbbf24, #f59e0b);
+  padding: 4px 1px;
+  border-radius: 6px;
+  text-align: center;
+  white-space: nowrap;
+  overflow: visible;
+  text-overflow: clip;
+  width: 100%;
+  box-sizing: border-box;
+  animation: badgeGlow 2s infinite ease-in-out;
+}
+
+@keyframes badgeGlow {
+  0%, 100% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.4); }
+  50% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.7); }
+}
+
+.zd-ticket-none {
+  display: block;
+  font-size: 10px;
+  color: #94a3b8;
+  font-style: italic;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+#zd-issue-preview-container {
+  width: 100%;
+  text-align: center;
+  flex-shrink: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 6px;
+  margin-bottom: 2px;
+}
+
+.zd-issue-preview-badge {
+  display: inline-block;
+  font-size: 8.5px;
+  font-weight: 800;
+  color: #38bdf8;
+  background-color: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  padding: 2px 4px;
+  border-radius: 4px;
+  letter-spacing: 0.5px;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  box-sizing: border-box;
+}
+
+.zd-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  flex-grow: 1;
+  min-height: 0;
+}
+
+.zd-btn {
+  color: white;
+  border: none;
+  width: 100%;
+  padding: 5px 1px;
+  font-size: 10px;
+  font-weight: 700;
+  border-radius: 6px;
+  cursor: pointer;
+  box-shadow: 0 3px 5px -1px rgba(0, 0, 0, 0.3);
+  text-align: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-height: 22px;
+  position: relative;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease;
+}
+
+.zd-btn:hover {
+  transform: translateY(-1.5px) scale(1.04);
+}
+
+.zd-btn:active {
+  transform: translateY(0px) scale(0.96);
+}
+
+.btn-pending {
+  background: linear-gradient(135deg, #ff6b6b 0%, #c0392b 100%);
+  box-shadow: 0 3px 8px rgba(255, 107, 107, 0.3);
+}
+
+.btn-updates {
+  background: linear-gradient(135deg, #ffd93d 0%, #f39c12 100%);
+  box-shadow: 0 3px 8px rgba(255, 217, 61, 0.3);
+  color: #0f172a;
+}
+
+.btn-compliance {
+  background: linear-gradient(135deg, #2ecc71 0%, #27ae60 100%);
+  box-shadow: 0 3px 8px rgba(46, 204, 113, 0.3);
+}
+
+.btn-escalations {
+  background: linear-gradient(135deg, #b5723e 0%, #8B5E3C 100%);
+  box-shadow: 0 3px 8px rgba(181, 114, 62, 0.3);
+}
+
+.btn-closed {
+  background: linear-gradient(135deg, #95a5a6 0%, #7f8c8d 100%);
+  box-shadow: 0 3px 8px rgba(149, 165, 166, 0.3);
+}
+
+.btn-remove-all {
+  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
+  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.3) !important;
+  font-weight: 900;
+  margin-top: 4px;
+}
+
+.btn-remove-all:hover {
+  box-shadow: 0 3px 12px rgba(220, 38, 38, 0.5) !important;
+}
+
+.zd-btn::after {
+  content: '';
+  position: absolute;
+  top: -50%; right: -50%; bottom: -50%; left: -50%;
+  background: linear-gradient(to bottom right, rgba(255,255,255,0) 0%, rgba(255,255,255,0.18) 50%, rgba(255,255,255,0) 100%);
+  transform: rotate(45deg) translateX(-110%);
+  transition: transform 0.4s ease;
+}
+
+.zd-btn:hover::after {
+  transform: rotate(45deg) translateX(110%);
+}
+
+.zd-toast-notification {
+  position: fixed;
+  top: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 12px 28px;
+  color: white;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  border-radius: 10px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.4), 0 0 16px rgba(255, 255, 255, 0.1);
+  z-index: 999999999;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  animation: zdFadeInOut 2.5s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+
+@keyframes zdFadeInOut {
+  0% { top: -60px; opacity: 0; }
+  15% { top: 24px; opacity: 1; }
+  85% { top: 24px; opacity: 1; }
+  100% { top: -60px; opacity: 0; }
+}
