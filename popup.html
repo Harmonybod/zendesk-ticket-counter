@@ -50,6 +50,17 @@
   <!-- ── Main App (hidden until signed in) ── -->
   <div class="app-main" id="app-main">
 
+    <!-- ── First-Sync Name Entry Modal ── -->
+    <div class="name-modal-overlay" id="name-modal-overlay" aria-hidden="true">
+      <div class="name-modal">
+        <div class="name-modal-logo">TT</div>
+        <h2 class="name-modal-title">Welcome! Set Your Name</h2>
+        <p class="name-modal-sub">This name appears in your exports and leaderboard.</p>
+        <input type="text" id="name-modal-input" placeholder="Your full name..." maxlength="40" />
+        <button class="btn-save name-modal-save" id="name-modal-save">Continue →</button>
+      </div>
+    </div>
+
     <!-- ── Header ── -->
     <header class="header">
       <div class="header-left">
@@ -85,11 +96,40 @@
 
         <div class="settings-divider"></div>
 
-        <!-- Agent Name -->
+        <!-- Shift Setup & Configuration -->
+        <div class="settings-row" id="shift-setup-settings">
+          <span class="settings-label">⏱ Shift Configuration</span>
+          <div class="shift-settings-grid">
+            <div>
+              <label for="shift-start-input">Start Time</label>
+              <input type="time" id="shift-start-input" />
+            </div>
+            <div>
+              <label for="shift-end-input">End Time</label>
+              <input type="time" id="shift-end-input" />
+            </div>
+            <div>
+              <label for="shift-type-input">Shift Type</label>
+              <select id="shift-type-input">
+                <option value="Day">Day Shift</option>
+                <option value="Night">Night Shift</option>
+                <option value="Weekend">Weekend Shift</option>
+              </select>
+            </div>
+            <div class="remarks-row">
+              <label for="shift-remarks-input">Remarks</label>
+              <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
+            </div>
+          </div>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Display Name -->
         <div class="settings-row">
-          <label class="settings-label" for="agent-name-input">Agent Name</label>
+          <label class="settings-label" for="agent-name-input">Display Name</label>
           <div class="settings-name-row">
-            <input type="text" id="agent-name-input" placeholder="Your name..." maxlength="30" />
+            <input type="text" id="agent-name-input" placeholder="Your name..." maxlength="40" />
             <button class="btn-save" id="save-name">Save</button>
           </div>
         </div>
@@ -291,40 +331,6 @@
     <!-- PREMIUM ANALYTICS SECTIONS                                        -->
     <!-- ═══════════════════════════════════════════════════════════════════ -->
 
-    <!-- ── Shift Setup & Configuration ── -->
-    <div class="section-header-bar">
-      <h3 class="section-header-title">
-        <span class="icon icon-primary"><svg><use href="#icon-settings"/></svg></span>
-        Shift Setup &amp; Configuration
-      </h3>
-    </div>
-    <div class="section-box">
-      <div class="shift-input-grid">
-        <div>
-          <label for="shift-type-input">Shift Type</label>
-          <select id="shift-type-input">
-            <option value="Day">Day Shift</option>
-            <option value="Night">Night Shift</option>
-            <option value="Weekend">Weekend Shift</option>
-          </select>
-        </div>
-        <div>
-          <label for="shift-start-input">Starting Time</label>
-          <input type="time" id="shift-start-input" />
-        </div>
-      </div>
-      <div class="shift-input-grid">
-        <div>
-          <label for="shift-end-input">End Time</label>
-          <input type="time" id="shift-end-input" />
-        </div>
-        <div class="remarks-row">
-          <label for="shift-remarks-input">Remarks</label>
-          <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
-        </div>
-      </div>
-    </div>
-
     <!-- ── All-Time Personal Leaderboard ── -->
     <div class="section-header-bar">
       <h3 class="section-header-title">
@@ -355,6 +361,27 @@
           <div class="record-lbl"><span class="badge-iron">#4</span> 4th PLACE</div>
         </div>
       </div>
+    </div>
+
+    <!-- ── Weekly Team Leaderboard ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-warning"><svg><use href="#icon-users"/></svg></span>
+        Weekly Team Leaderboard
+      </h3>
+    </div>
+    <div class="section-box" id="weekly-leaderboard-box">
+      <div class="weekly-lb-week-label" id="weekly-lb-week-label">This Week</div>
+      <!-- Top 3 Podium -->
+      <div class="weekly-lb-podium" id="weekly-lb-podium">
+        <div class="lb-loading">Loading leaderboard…</div>
+      </div>
+      <!-- Show More button -->
+      <button class="weekly-lb-more-btn" id="weekly-lb-more-btn" style="display:none;">
+        Show more ▾
+      </button>
+      <!-- Full list (rank 4+) -->
+      <div class="weekly-lb-full" id="weekly-lb-full" style="display:none;"></div>
     </div>
 
     <!-- ── Calendar Archive Inspector ── -->

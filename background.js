@@ -32,7 +32,7 @@ let lastCloudSyncTime = 0;
 async function getLocal() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId'],
+      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId', 'shiftConfig'],
       (result) => {
         if (chrome.runtime.lastError) {
           console.error('[ZTK] Failed to read local storage:', chrome.runtime.lastError.message);
@@ -46,7 +46,8 @@ async function getLocal() {
             countingEnabled: true,
             theme: 'dark',
             tgToken: '',
-            tgChatId: ''
+            tgChatId: '',
+            shiftConfig: null
           });
           return;
         }
@@ -60,7 +61,8 @@ async function getLocal() {
           countingEnabled: result.countingEnabled !== false, // default true
           theme: result.theme ?? 'dark',
           tgToken: result.tgToken ?? '',
-          tgChatId: result.tgChatId ?? ''
+          tgChatId: result.tgChatId ?? '',
+          shiftConfig: result.shiftConfig ?? null
         });
       }
     );
@@ -85,6 +87,30 @@ async function saveLocal(data) {
 
 // ── Cloud Sync: Push to Firestore ─────────────
 
+function getWeeklyTotal(dailyTotals) {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  
+  let total = 0;
+  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+  
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = dateKey(d.getTime());
+    if (dailyTotals[key]) {
+      for (const t of ALL_TYPES) {
+        total += dailyTotals[key][t] ?? 0;
+      }
+    }
+  }
+  
+  return total;
+}
+
 async function syncToCloud(dailyTotals, ticketLog, settings) {
   if (!isFirebaseConfigured()) {
     console.log('[ZTK Cloud] Firebase not configured, skipping cloud sync');
@@ -101,7 +127,21 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
   try {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
     await firestoreWrite(session.uid, dailyTotals, ticketLog, settings, session.idToken);
-    console.log('[ZTK Cloud] ✓ Successfully synced to Firestore');
+    
+    // Also write to weekly leaderboard
+    const weekKey = getCurrentWeekKey();
+    const weekTotal = getWeeklyTotal(dailyTotals);
+    await writeWeeklyLeaderboardEntry(
+      session.uid,
+      session.idToken,
+      weekKey,
+      session.email,
+      settings.agentName || session.displayName || session.email,
+      session.photoUrl,
+      weekTotal
+    );
+    
+    console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly leaderboard');
     return true;
   } catch (e) {
     console.error('[ZTK Cloud] ✗ Failed to push to Firestore:', e.message);
@@ -367,6 +407,7 @@ async function getStats() {
     theme: data.theme,
     tgToken: data.tgToken,
     tgChatId: data.tgChatId,
+    shiftConfig: data.shiftConfig,
     lastEvent: data.events.length ? data.events[data.events.length - 1] : null,
     dailyTotals: dt,
     todayKey: todayKey(),
@@ -503,8 +544,20 @@ async function getDetailedStats(range, dateParam) {
 
 // ── Export ────────────────────────────────────
 
-// Determine shift info based on the day of week
-function getShiftInfo(dateStr) {
+// Determine shift info: use saved shiftConfig if available, otherwise fallback to day-of-week logic
+function getShiftInfo(dateStr, shiftConfig) {
+  // If we have saved shift config, use it
+  if (shiftConfig && shiftConfig.shiftType) {
+    const startTime = shiftConfig.shiftStart ? convertTo12Hour(shiftConfig.shiftStart) : '8:00 AM';
+    const endTime = shiftConfig.shiftEnd ? convertTo12Hour(shiftConfig.shiftEnd) : '5:00 PM';
+    return {
+      shift: shiftConfig.shiftType,
+      startTime,
+      endTime
+    };
+  }
+  
+  // Fallback: derive from day of week
   const d = new Date(dateStr + 'T00:00:00');
   const day = d.getDay(); // 0=Sun, 6=Sat
   if (day === 0) { // Sunday
@@ -514,6 +567,16 @@ function getShiftInfo(dateStr) {
   } else { // Mon-Fri
     return { shift: 'Night', startTime: '6:00 PM', endTime: '10:00 PM' };
   }
+}
+
+// Convert 24-hour time (HH:MM) to 12-hour format (HH:MM AM/PM)
+function convertTo12Hour(timeStr) {
+  if (!timeStr) return '';
+  const [hours, minutes] = timeStr.split(':');
+  const h = parseInt(hours, 10);
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 || 12;
+  return `${h12}:${minutes} ${ampm}`;
 }
 
 // Map event type to CSV column name
@@ -645,7 +708,7 @@ async function exportData(format, rangeType, rangeParams) {
   // Emit rows: one row per "slot" within each date group
   for (const date of dateGroups) {
     const colBuckets = dateGroupMap.get(date);
-    const shiftInfo = getShiftInfo(date);
+    const shiftInfo = getShiftInfo(date, data.shiftConfig);
     const [y, m, d] = date.split('-');
     const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
 
@@ -678,7 +741,7 @@ async function exportData(format, rangeType, rangeParams) {
       .sort();
     for (const k of sorted) {
       const dt = data.dailyTotals[k];
-      const shiftInfo = getShiftInfo(k);
+      const shiftInfo = getShiftInfo(k, data.shiftConfig);
       const [y, m, d] = k.split('-');
       const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
       const total = (dt.open ?? 0) + (dt.new ?? 0) + (dt.team ?? 0) +
@@ -866,6 +929,18 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case 'GET_DETAILED_STATS':
           sendResponse(await getDetailedStats(msg.range, msg.dateParam));
+          break;
+        case 'GET_WEEKLY_LEADERBOARD':
+          {
+            const session = await getFirebaseSession(false);
+            if (!session) {
+              sendResponse({ entries: [], weekKey: msg.weekKey || getCurrentWeekKey() });
+              break;
+            }
+            const weekKey = msg.weekKey || getCurrentWeekKey();
+            const entries = await readWeeklyLeaderboard(session.idToken, weekKey);
+            sendResponse({ entries, weekKey });
+          }
           break;
         case 'WIPE_DATA':
           await saveLocal({

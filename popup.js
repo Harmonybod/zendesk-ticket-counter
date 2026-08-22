@@ -77,12 +77,65 @@ function checkAuthAndInit() {
                 updateChartTitle();
                 renderStats();
                 renderChart();
+                // Check if user has a saved name - if not, show name modal
+                if (!stats.agentName || stats.agentName.trim() === '') {
+                    showNameModal();
+                }
             });
         } else {
             showAuthScreen();
         }
     });
 }
+
+// ── Name Modal Functions ─────────────────────────────────────
+
+function showNameModal() {
+    const modal = $('name-modal-overlay');
+    if (modal) {
+        modal.classList.add('visible');
+        modal.setAttribute('aria-hidden', 'false');
+        const input = $('name-modal-input');
+        if (input) {
+            input.value = '';
+            input.focus();
+        }
+    }
+}
+
+function hideNameModal() {
+    const modal = $('name-modal-overlay');
+    if (modal) {
+        modal.classList.remove('visible');
+        modal.setAttribute('aria-hidden', 'true');
+    }
+}
+
+// Name modal save button
+$('name-modal-save').addEventListener('click', () => {
+    const input = $('name-modal-input');
+    const name = input.value.trim();
+    
+    if (!name) {
+        input.focus();
+        return;
+    }
+    
+    chrome.runtime.sendMessage({ action: 'SET_AGENT_NAME', name }, () => {
+        stats.agentName = name;
+        $('agent-name').textContent = name;
+        $('agent-name-input').value = name;
+        hideNameModal();
+        showToast('✓ Name saved');
+    });
+});
+
+// Allow Enter key to save
+$('name-modal-input').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        $('name-modal-save').click();
+    }
+});
 
 // Sign in button
 $('google-signin-btn').addEventListener('click', () => {
@@ -193,6 +246,14 @@ function applySettingsUI() {
     $('tg-token-input').value = stats.tgToken || '';
     $('tg-chat-id-input').value = stats.tgChatId || '';
     $('tg-status').textContent = (stats.tgToken && stats.tgChatId) ? '✓ Telegram connected' : '';
+    
+    // Shift Config
+    if (stats.shiftConfig) {
+        if ($('shift-type-input')) $('shift-type-input').value = stats.shiftConfig.shiftType || 'Day';
+        if ($('shift-start-input')) $('shift-start-input').value = stats.shiftConfig.shiftStart || '';
+        if ($('shift-end-input')) $('shift-end-input').value = stats.shiftConfig.shiftEnd || '';
+        if ($('shift-remarks-input')) $('shift-remarks-input').value = stats.shiftConfig.shiftRemarks || '';
+    }
 }
 
 $('settings-btn').addEventListener('click', () => {

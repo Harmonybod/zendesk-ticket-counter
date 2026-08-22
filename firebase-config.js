@@ -347,3 +347,125 @@ function isFirebaseConfigured() {
     FIREBASE_CONFIG.projectId.length > 0
   );
 }
+
+
+// ── Weekly Leaderboard Helpers ─────────────────────────────────────────────
+
+/**
+ * Get ISO week key (YYYY-WW) for Monday-based weeks.
+ * @returns {string} Week key like "2026-34"
+ */
+function getCurrentWeekKey() {
+  const now = new Date();
+  const day = now.getDay(); // 0=Sun
+  const monday = new Date(now);
+  // Find Monday of current week
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  
+  const year = monday.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  // ISO week number: days since start of year, adjusted for day of week
+  const days = Math.floor((monday - startOfYear) / 86400000);
+  const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+  
+  return `${year}-${String(weekNum).padStart(2, '0')}`;
+}
+
+/**
+ * Get the week key for last week.
+ * @returns {string} Week key like "2026-33"
+ */
+function getLastWeekKey() {
+  const now = new Date();
+  const lastWeek = new Date(now);
+  lastWeek.setDate(now.getDate() - 7);
+  
+  const day = lastWeek.getDay();
+  const monday = new Date(lastWeek);
+  monday.setDate(lastWeek.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+  
+  const year = monday.getFullYear();
+  const startOfYear = new Date(year, 0, 1);
+  const days = Math.floor((monday - startOfYear) / 86400000);
+  const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7);
+  
+  return `${year}-${String(weekNum).padStart(2, '0')}`;
+}
+
+/**
+ * Write user's weekly total to the shared leaderboard.
+ * @param {string} uid - Firebase user ID
+ * @param {string} idToken - Firebase ID token
+ * @param {string} weekKey - Week key like "2026-34"
+ * @param {string} email - User email
+ * @param {string} displayName - User display name
+ * @param {string} photoUrl - User profile photo URL
+ * @param {number} weekTotal - Total tickets for the week
+ */
+async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, displayName, photoUrl, weekTotal) {
+  const url = `${FIRESTORE_BASE}/weeklyLeaderboard/${weekKey}/users/${encodeURIComponent(uid)}`;
+  
+  const body = {
+    fields: {
+      email: { stringValue: email || '' },
+      displayName: { stringValue: displayName || email || '' },
+      photoUrl: { stringValue: photoUrl || '' },
+      weekTotal: { integerValue: String(weekTotal) },
+      weekKey: { stringValue: weekKey },
+      lastUpdated: { integerValue: String(Date.now()) }
+    }
+  };
+  
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+  
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body)
+  });
+  
+  if (!response.ok) {
+    throw new Error(`Leaderboard write failed (${response.status})`);
+  }
+  
+  return true;
+}
+
+/**
+ * Read all users' entries for a given week.
+ * @param {string} idToken - Firebase ID token
+ * @param {string} weekKey - Week key like "2026-34"
+ * @returns {Array} Array of user entries sorted by weekTotal descending
+ */
+async function readWeeklyLeaderboard(idToken, weekKey) {
+  const url = `${FIRESTORE_BASE}/weeklyLeaderboard/${weekKey}/users`;
+  
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+  
+  const response = await fetch(url, {
+    method: 'GET',
+    headers
+  });
+  
+  if (response.status === 404 || response.status === 400) return [];
+  if (!response.ok) return [];
+  
+  const data = await response.json();
+  if (!data.documents) return [];
+  
+  return data.documents.map(doc => {
+    const f = doc.fields || {};
+    return {
+      uid: doc.name.split('/').pop(),
+      email: f.email?.stringValue || '',
+      displayName: f.displayName?.stringValue || '',
+      photoUrl: f.photoUrl?.stringValue || '',
+      weekTotal: parseInt(f.weekTotal?.integerValue || '0', 10),
+      weekKey: f.weekKey?.stringValue || weekKey
+    };
+  });
+}
