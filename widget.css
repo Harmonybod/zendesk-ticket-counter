@@ -556,21 +556,108 @@
    PREMIUM SLENDER FLOATING OVERLAY MENUBAR
    ══════════════════════════════════════════════════════════════════════════ */
 
+/* ── Overlay Theme Variables ─────────────────────────────────────────────── */
+/* The overlay lives inside the Zendesk page's own document, so it can't read
+   popup.html's :root variables — content.js sets data-theme on the overlay
+   element itself (from the same 'theme' setting the popup's Appearance
+   picker writes), and these mirror the 5 palettes defined in popup.css.
+   "moody" is the default/fallback, same as popup.css's bare :root rule. */
+#zd-tracker-overlay,
+#zd-tracker-overlay[data-theme="moody"] {
+  --ov-bg-1: rgba(32, 33, 35, 0.97);
+  --ov-bg-2: rgba(14, 14, 16, 0.98);
+  --ov-border: rgba(255, 255, 255, 0.08);
+  --ov-divider: rgba(255, 255, 255, 0.12);
+  --ov-text-dim: #9a9a9a;
+  --ov-badge-1: #10a37f;
+  --ov-badge-2: #0c7c60;
+  --ov-badge-text: #ffffff;
+  --ov-issue-color: #34d399;
+  --ov-issue-bg: rgba(16, 163, 127, 0.15);
+  --ov-issue-border: rgba(16, 163, 127, 0.3);
+  --ov-handle-1: #10a37f;
+  --ov-handle-2: #5fd1ae;
+}
+
+#zd-tracker-overlay[data-theme="minimalist"] {
+  --ov-bg-1: rgba(255, 255, 255, 0.98);
+  --ov-bg-2: rgba(244, 244, 245, 0.98);
+  --ov-border: rgba(0, 0, 0, 0.1);
+  --ov-divider: rgba(0, 0, 0, 0.12);
+  --ov-text-dim: #6b7280;
+  --ov-badge-1: #3f3f46;
+  --ov-badge-2: #2c2c31;
+  --ov-badge-text: #ffffff;
+  --ov-issue-color: #3f3f46;
+  --ov-issue-bg: rgba(63, 63, 70, 0.1);
+  --ov-issue-border: rgba(63, 63, 70, 0.25);
+  --ov-handle-1: #3f3f46;
+  --ov-handle-2: #6f6f78;
+}
+
+#zd-tracker-overlay[data-theme="vibrant"] {
+  --ov-bg-1: rgba(30, 22, 56, 0.97);
+  --ov-bg-2: rgba(21, 15, 40, 0.98);
+  --ov-border: rgba(255, 255, 255, 0.1);
+  --ov-divider: rgba(255, 255, 255, 0.14);
+  --ov-text-dim: #b39ddb;
+  --ov-badge-1: #ff2e88;
+  --ov-badge-2: #cc2568;
+  --ov-badge-text: #ffffff;
+  --ov-issue-color: #ff7ab3;
+  --ov-issue-bg: rgba(255, 46, 136, 0.15);
+  --ov-issue-border: rgba(255, 46, 136, 0.32);
+  --ov-handle-1: #ff2e88;
+  --ov-handle-2: #ff7ab3;
+}
+
+#zd-tracker-overlay[data-theme="organic"] {
+  --ov-bg-1: rgba(250, 249, 242, 0.98);
+  --ov-bg-2: rgba(243, 241, 231, 0.98);
+  --ov-border: rgba(59, 79, 49, 0.15);
+  --ov-divider: rgba(59, 79, 49, 0.18);
+  --ov-text-dim: #5c6b4c;
+  --ov-badge-1: #4c7a3f;
+  --ov-badge-2: #3c6132;
+  --ov-badge-text: #ffffff;
+  --ov-issue-color: #3c6132;
+  --ov-issue-bg: rgba(76, 122, 63, 0.12);
+  --ov-issue-border: rgba(76, 122, 63, 0.28);
+  --ov-handle-1: #4c7a3f;
+  --ov-handle-2: #82b374;
+}
+
+#zd-tracker-overlay[data-theme="vintage"] {
+  --ov-bg-1: rgba(46, 33, 24, 0.97);
+  --ov-bg-2: rgba(36, 26, 18, 0.98);
+  --ov-border: rgba(255, 224, 178, 0.12);
+  --ov-divider: rgba(255, 224, 178, 0.16);
+  --ov-text-dim: #a08d78;
+  --ov-badge-1: #d98e3e;
+  --ov-badge-2: #ad7231;
+  --ov-badge-text: #2a1a0c;
+  --ov-issue-color: #eab876;
+  --ov-issue-bg: rgba(217, 142, 62, 0.15);
+  --ov-issue-border: rgba(217, 142, 62, 0.3);
+  --ov-handle-1: #d98e3e;
+  --ov-handle-2: #eab876;
+}
+
 #zd-tracker-overlay {
   position: fixed;
   top: 160px;
   left: 72px;
-  background: linear-gradient(135deg, rgba(30, 41, 59, 0.96) 0%, rgba(15, 23, 42, 0.98) 100%);
+  background: linear-gradient(135deg, var(--ov-bg-1) 0%, var(--ov-bg-2) 100%);
   color: #f8fafc;
   z-index: 99999999;
   font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.1) inset;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--ov-border) inset;
   padding: 10px 4px;
   border-radius: 12px;
   box-sizing: border-box;
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--ov-border);
   backdrop-filter: blur(10px);
-  
+
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -581,7 +668,14 @@
   min-height: 250px;
   max-height: 800px;
   height: 350px;
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease, background 0.3s ease;
+}
+
+/* Light-family themes (minimalist/organic) sit on a bright panel, so the
+   default off-white overlay text (#f8fafc) needs to flip dark to stay readable. */
+#zd-tracker-overlay[data-theme="minimalist"],
+#zd-tracker-overlay[data-theme="organic"] {
+  color: #18181b;
 }
 
 .zd-drag-handle {
@@ -604,7 +698,7 @@
 .zd-drag-handle span {
   display: block;
   height: 2px;
-  background: linear-gradient(90deg, #38bdf8, #a855f7);
+  background: linear-gradient(90deg, var(--ov-handle-1), var(--ov-handle-2));
   border-radius: 2px;
   width: 100%;
 }
@@ -620,8 +714,8 @@
   display: block;
   font-size: 9px;
   font-weight: 800;
-  color: #0f172a !important;
-  background: linear-gradient(45deg, #fbbf24, #f59e0b);
+  color: var(--ov-badge-text) !important;
+  background: linear-gradient(45deg, var(--ov-badge-1), var(--ov-badge-2));
   padding: 4px 1px;
   border-radius: 6px;
   text-align: center;
@@ -634,14 +728,14 @@
 }
 
 @keyframes badgeGlow {
-  0%, 100% { box-shadow: 0 0 4px rgba(245, 158, 11, 0.4); }
-  50% { box-shadow: 0 0 10px rgba(245, 158, 11, 0.7); }
+  0%, 100% { box-shadow: 0 0 4px var(--ov-badge-1); }
+  50% { box-shadow: 0 0 10px var(--ov-badge-1); }
 }
 
 .zd-ticket-none {
   display: block;
   font-size: 10px;
-  color: #94a3b8;
+  color: var(--ov-text-dim);
   font-style: italic;
   font-weight: 600;
   letter-spacing: 0.3px;
@@ -651,7 +745,7 @@
   width: 100%;
   text-align: center;
   flex-shrink: 0;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  border-bottom: 1px solid var(--ov-divider);
   padding-bottom: 6px;
   margin-bottom: 2px;
 }
@@ -660,9 +754,9 @@
   display: inline-block;
   font-size: 8.5px;
   font-weight: 800;
-  color: #38bdf8;
-  background-color: rgba(56, 189, 248, 0.15);
-  border: 1px solid rgba(56, 189, 248, 0.3);
+  color: var(--ov-issue-color);
+  background-color: var(--ov-issue-bg);
+  border: 1px solid var(--ov-issue-border);
   padding: 2px 4px;
   border-radius: 4px;
   letter-spacing: 0.5px;
@@ -845,7 +939,7 @@
 #zd-tracker-overlay.horizontal-mode .zd-drag-handle span {
   width: 2px;
   height: 100%;
-  background: linear-gradient(180deg, #38bdf8, #a855f7);
+  background: linear-gradient(180deg, var(--ov-handle-1), var(--ov-handle-2));
 }
 
 #zd-tracker-overlay.horizontal-mode #zd-current-ticket,

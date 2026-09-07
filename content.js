@@ -87,6 +87,17 @@
         return `#${toHex(mix(a.r, b.r))}${toHex(mix(a.g, b.g))}${toHex(mix(a.b, b.b))}`;
     }
 
+    // Mirrors popup.js's THEME_NAMES/normalizeThemeKey — the overlay applies
+    // the same 'theme' setting the popup's Appearance picker writes, so
+    // legacy 'dark'/'light' values map onto their closest new theme instead
+    // of falling through to an unstyled/mismatched attribute value.
+    const VALID_THEME_KEYS = ['moody', 'minimalist', 'vibrant', 'organic', 'vintage'];
+    function normalizeThemeKey(theme) {
+        if (theme === 'light') return 'minimalist';
+        if (VALID_THEME_KEYS.includes(theme)) return theme;
+        return 'moody';
+    }
+
     // ── Animated Toast Notifications ─────────────
     function showToastNotification(message, actionType, category) {
         const oldToast = document.querySelector('.zd-toast-notification');
@@ -264,7 +275,7 @@
         overlayCreationInProgress = true;
 
         chrome.storage.local.get(
-            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'categoryColors'],
+            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'categoryColors', 'theme'],
             (settings) => {
                 overlayCreationInProgress = false;
                 if (chrome.runtime.lastError) return;
@@ -275,6 +286,7 @@
                 const teamEnabled = !!settings.teamButtonEnabled;
                 const isHorizontal = settings.floaterLayout === 'horizontal';
                 const categoryColors = settings.categoryColors || {};
+                const themeKey = normalizeThemeKey(settings.theme);
 
                 const visibleCategories = CATEGORIES.filter(c => !c.optional || teamEnabled);
 
@@ -294,6 +306,7 @@
 
                 const overlay = document.createElement('div');
                 overlay.id = OVERLAY_ID;
+                overlay.setAttribute('data-theme', themeKey);
                 if (isHorizontal) overlay.classList.add('horizontal-mode');
 
                 overlay.innerHTML = `
@@ -385,7 +398,7 @@
     if (chrome.storage && chrome.storage.onChanged) {
         chrome.storage.onChanged.addListener((changes, area) => {
             if (area !== 'local') return;
-            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors'];
+            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors', 'theme'];
             if (watched.some(k => k in changes)) {
                 const existing = document.getElementById(OVERLAY_ID);
                 if (existing) existing.remove();
