@@ -381,7 +381,7 @@ $('settings-btn').addEventListener('click', () => {
 // Opens the web dashboard (stats + leaderboard) in a new tab, signed into
 // the same Google account/Firebase project the extension already syncs to.
 // Update DASHBOARD_URL once the dashboard is deployed — see web/README.md.
-const DASHBOARD_URL = 'https://zendesk-tracker-dashboard.vercel.app';
+const DASHBOARD_URL = 'https://zendesk-ticket-counter.vercel.app';
 if ($('home-btn')) {
     $('home-btn').addEventListener('click', () => {
         chrome.tabs.create({ url: DASHBOARD_URL });

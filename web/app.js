@@ -113,7 +113,18 @@ $('signin-btn').addEventListener('click', async () => {
     try {
         await signInWithPopup(auth, new GoogleAuthProvider());
     } catch (e) {
-        $('auth-error').textContent = `Sign-in failed: ${e.message}`;
+        console.error('[TT Dashboard] Sign-in failed:', e.code, e.message);
+        let msg = `Sign-in failed: ${e.message}`;
+        if (e.code === 'auth/unauthorized-domain') {
+            msg = `This domain isn't authorized for sign-in yet. In the Firebase Console, go to Authentication → Settings → Authorized domains, and add ${location.hostname}.`;
+        } else if (e.code === 'auth/popup-blocked') {
+            msg = 'Your browser blocked the sign-in popup. Allow popups for this site and try again.';
+        } else if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+            // User closed it themselves — not a real error, no need to alarm them.
+            $('auth-error').hidden = true;
+            return;
+        }
+        $('auth-error').textContent = msg;
         $('auth-error').hidden = false;
     }
 });

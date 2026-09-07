@@ -52,19 +52,20 @@ already on, but double-check:
 ## Step 4 — Authorize the new domain in Firebase
 
 1. Firebase Console → **Authentication** → **Settings** → **Authorized domains**.
-2. Click **Add domain** and add your new `*.vercel.app` domain (and any
+2. Click **Add domain** and add `zendesk-ticket-counter.vercel.app` (and any
    custom domain you later attach in Vercel).
 
-Without this step, Google Sign-In on the dashboard will fail with an
-`auth/unauthorized-domain` error — this is the step people most often miss.
+Without this step, Google Sign-In on the dashboard fails with
+`auth/unauthorized-domain` — this is the step people most often miss, and
+the app.js sign-in handler now surfaces that error message on the page
+(and in the browser console) instead of silently doing nothing, so if
+sign-in still doesn't work after this step, check that error text first.
 
 ## Step 5 — Point the extension's Home button at it
 
-In `popup.js`, find:
-```js
-const DASHBOARD_URL = 'https://zendesk-tracker-dashboard.vercel.app';
-```
-Replace it with your actual Vercel URL from Step 3, then reload the
+Already done — `popup.js`'s `DASHBOARD_URL` points at
+`https://zendesk-ticket-counter.vercel.app`. If you ever move the
+dashboard to a different domain, update that constant and reload the
 extension (`chrome://extensions` → reload).
 
 ## Step 6 — Install it as an app (optional, for mobile)
