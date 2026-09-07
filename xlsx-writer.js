@@ -131,16 +131,36 @@
     // ── Cell styles available to callers via XlsxWriter.STYLES ────────────
     const STYLES = { DATA: 0, HEADER: 1 };
 
-    const STYLES_XML = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+    // Header fill is caller-supplied (see buildWorkbook's `options.headerColor`)
+    // so a report's header can be colored by, e.g., how many tickets it holds.
+    // Font color is picked for contrast against whatever fill comes in, using
+    // a standard perceived-brightness weighting (not full WCAG luminance —
+    // this only needs to pick black vs white, not measure a precise ratio).
+    function hexToRgbTriplet(hex) {
+        const h = String(hex).replace('#', '');
+        const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+        const num = parseInt(full, 16);
+        return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+    }
+
+    function perceivedBrightness(hex) {
+        const { r, g, b } = hexToRgbTriplet(hex);
+        return (r * 299 + g * 587 + b * 114) / 1000;
+    }
+
+    function buildStylesXml(headerColorHex) {
+        const fill = String(headerColorHex || '00B050').replace('#', '').toUpperCase();
+        const fontRgb = perceivedBrightness(fill) > 150 ? '000000' : 'FFFFFF';
+        return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
   <fonts count="2">
     <font><sz val="11"/><name val="Calibri"/><color rgb="FF000000"/></font>
-    <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FFFFFFFF"/></font>
+    <font><sz val="11"/><b/><name val="Calibri"/><color rgb="FF${fontRgb}"/></font>
   </fonts>
   <fills count="3">
     <fill><patternFill patternType="none"/></fill>
     <fill><patternFill patternType="gray125"/></fill>
-    <fill><patternFill patternType="solid"><fgColor rgb="FF00B050"/><bgColor indexed="64"/></patternFill></fill>
+    <fill><patternFill patternType="solid"><fgColor rgb="FF${fill}"/><bgColor indexed="64"/></patternFill></fill>
   </fills>
   <borders count="2">
     <border><left/><right/><top/><bottom/><diagonal/></border>
@@ -162,6 +182,7 @@
     <cellStyle name="Normal" xfId="0" builtinId="0"/>
   </cellStyles>
 </styleSheet>`;
+    }
 
     function buildSheetXml(sheet) {
         let colsXml = '';
@@ -202,7 +223,10 @@
 
     // ── Public API ─────────────────────────────────────────────────────────
     // sheets: [{ name, cols: [{width}], rows: [{height, cells: [{value, style}]}] }]
-    function buildWorkbook(sheets) {
+    // options: { headerColor } — hex string (e.g. "ED7D31" or "#ED7D31") for
+    // the STYLES.HEADER fill; defaults to the original green if omitted.
+    function buildWorkbook(sheets, options) {
+        options = options || {};
         const contentTypesXml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
 <Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
   <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
@@ -236,7 +260,7 @@
             { name: '_rels/.rels', data: toUtf8(rootRelsXml) },
             { name: 'xl/workbook.xml', data: toUtf8(workbookXml) },
             { name: 'xl/_rels/workbook.xml.rels', data: toUtf8(workbookRelsXml) },
-            { name: 'xl/styles.xml', data: toUtf8(STYLES_XML) }
+            { name: 'xl/styles.xml', data: toUtf8(buildStylesXml(options.headerColor)) }
         ];
         sheets.forEach((s, i) => {
             files.push({ name: `xl/worksheets/sheet${i + 1}.xml`, data: toUtf8(buildSheetXml(s)) });

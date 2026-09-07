@@ -1269,10 +1269,28 @@ const REPORT_HEADERS = [
     'Closed Tickets,\nif any'
 ];
 
+// ── Header Color by Ticket Volume ─────────────────────────────────────────
+// Colors the report header by how many tickets that shift handled, so it
+// reads as a quick heat-map instead of always being the same fixed green.
+function getHeaderColorForCount(count) {
+    if (count > 120) return '5D6D7E'; // Blue Gray
+    if (count >= 100) return '76448A'; // Purple
+    if (count >= 90) return '922B21'; // Dark Red
+    if (count >= 80) return '1B4F72'; // Dark Blue
+    if (count >= 70) return '2E86C1'; // Blue
+    if (count >= 60) return 'AED6F1'; // Light Blue
+    if (count >= 45) return '1D8348'; // Dark Green
+    if (count >= 30) return 'A9DFBF'; // Light Green
+    if (count >= 15) return 'F1C40F'; // Yellow
+    return 'ED7D31'; // Orange
+}
+
 function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
     const { STYLES } = XlsxWriter;
     const maxContentRows = Math.max(1, openArr.length, newArr.length, complianceArr.length, escalationsArr.length, closedArr.length);
     const totalTemplateRows = Math.max(28, maxContentRows + 1);
+    const totalTickets = openArr.length + newArr.length + complianceArr.length + escalationsArr.length + closedArr.length;
+    const headerColor = getHeaderColorForCount(totalTickets);
 
     // e.g. "#342345 - Where is my money?" — ticket number plus its captured
     // Payee Issue Type, inline in the same cell right next to the ticket.
@@ -1315,7 +1333,7 @@ function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, 
         rows: [headerRow, ...dataRows]
     };
 
-    const bytes = XlsxWriter.buildWorkbook([reportSheet]);
+    const bytes = XlsxWriter.buildWorkbook([reportSheet], { headerColor });
     const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const finalExportName = `tickets-${targetDateStr}.xlsx`;
 
