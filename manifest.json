@@ -4,9 +4,9 @@
   "version": "4.0.0",
   "description": "Premium Zendesk ticket analytics — leaderboard, ratio breakdowns, hourly pacing, calendar inspector, Excel export, cloud sync, and floating overlay.",
   "icons": {
-    "16": "icons/icon16.png",
-    "48": "icons/icon48.png",
-    "128": "icons/icon128.png"
+    "16": "icons/ticket_tracker_circle_badge_logo_darker.png",
+    "48": "icons/ticket_tracker_circle_badge_logo_darker.png",
+    "128": "icons/ticket_tracker_circle_badge_logo_darker.png"
   },
   "oauth2": {
     "client_id": "360976988892-0kg8lk2p03j7mgl8v7ld4i45544r0ovt.apps.googleusercontent.com",
@@ -49,9 +49,9 @@
   "action": {
     "default_popup": "popup.html",
     "default_icon": {
-      "16": "icons/icon16.png",
-      "48": "icons/icon48.png",
-      "128": "icons/icon128.png"
+      "16": "icons/ticket_tracker_circle_badge_logo_darker.png",
+      "48": "icons/ticket_tracker_circle_badge_logo_darker.png",
+      "128": "icons/ticket_tracker_circle_badge_logo_darker.png"
     },
     "default_title": "Zendesk Ticket Tracker"
   }

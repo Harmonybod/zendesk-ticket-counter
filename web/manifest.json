@@ -9,7 +9,7 @@
   "background_color": "#0e0e10",
   "theme_color": "#10a37f",
   "icons": [
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+    { "src": "icons/ticket_tracker_circle_badge_logo_darker.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/ticket_tracker_circle_badge_logo_darker.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
   ]
 }
