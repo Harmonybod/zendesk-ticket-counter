@@ -70,7 +70,10 @@
           <span class="agent-name" id="agent-name">Zendesk Agent</span>
         </div>
       </div>
-      <button class="settings-btn" id="settings-btn" title="Settings">⚙</button>
+      <div class="header-actions">
+        <button class="home-btn" id="home-btn" title="Open Dashboard">🏠</button>
+        <button class="settings-btn" id="settings-btn" title="Settings">⚙</button>
+      </div>
     </header>
 
     <!-- ── Settings Panel (slide-down) ── -->
@@ -309,12 +312,16 @@
 
     <!-- ── Chart ── -->
     <section class="chart-section">
+      <div class="chart-view-toggle">
+        <button class="chart-view-btn active" id="chart-view-tickets" data-view="tickets">Number of Tickets</button>
+        <button class="chart-view-btn" id="chart-view-payee" data-view="payee">Payee Issue Types</button>
+      </div>
       <div class="chart-header">
         <button class="chart-title-btn" id="chart-title-btn" title="Click to pick a custom date">
           <span id="chart-title">Today</span>
           <span class="chart-title-icon">📅</span>
         </button>
-        <div class="chart-legend">
+        <div class="chart-legend" id="chart-legend-row">
           <span class="legend-dot red-dot"></span> Open
           <span class="legend-dot yellow-dot"></span> New
           <span class="team-legend-item"><span class="legend-dot blue-dot"></span> Team</span>

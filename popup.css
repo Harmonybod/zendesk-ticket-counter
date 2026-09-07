@@ -276,7 +276,14 @@ body {
     display: block;
 }
 
-.settings-btn {
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.settings-btn,
+.home-btn {
     background: var(--bg-2);
     border: 1px solid var(--border);
     color: var(--text-2);
@@ -291,7 +298,8 @@ body {
     justify-content: center;
 }
 
-.settings-btn:hover {
+.settings-btn:hover,
+.home-btn:hover {
     background: var(--bg-card-h);
     color: var(--accent);
     border-color: rgba(108, 99, 255, 0.3);
@@ -628,6 +636,39 @@ body {
     padding: 0 14px;
     margin-bottom: 12px;
     position: relative;
+}
+
+.chart-view-toggle {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 10px;
+}
+
+.chart-view-btn {
+    flex: 1;
+    padding: 6px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.2px;
+}
+
+.chart-view-btn:hover {
+    border-color: var(--border-h);
+    color: var(--text-1);
+    background: var(--bg-card);
+}
+
+.chart-view-btn.active {
+    background: var(--btn-active-bg);
+    border-color: var(--btn-active-border);
+    color: var(--text-1);
 }
 
 .chart-header {

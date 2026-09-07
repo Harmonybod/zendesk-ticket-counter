@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en" data-theme="moody">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ticket Tracker Dashboard</title>
+  <meta name="description" content="Stats, ticket history, and leaderboard for Zendesk Ticket Tracker." />
+
+  <!-- PWA / "Add to Home Screen" -->
+  <link rel="manifest" href="manifest.json" />
+  <meta name="theme-color" content="#10a37f" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="TT Dashboard" />
+  <link rel="apple-touch-icon" href="icons/icon-512.png" />
+  <link rel="icon" href="icons/icon-512.png" />
+
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+  <!-- ── Sign-in screen ── -->
+  <div id="auth-screen" class="auth-screen">
+    <div class="auth-card">
+      <img src="icons/icon-512.png" class="auth-logo" alt="" />
+      <h1>Ticket Tracker Dashboard</h1>
+      <p>Sign in with the same Google account you use in the Chrome extension to see your stats.</p>
+      <button id="signin-btn" class="btn-google-signin">
+        <img src="icons/google.svg" width="18" height="18" alt="" />
+        Sign in with Google
+      </button>
+      <p id="auth-error" class="auth-error" hidden></p>
+    </div>
+  </div>
+
+  <!-- ── Main dashboard (hidden until signed in) ── -->
+  <div id="app-main" class="app-main" hidden>
+
+    <header class="header">
+      <div class="header-left">
+        <img src="icons/icon-512.png" class="logo" alt="" />
+        <div class="header-text">
+          <h1 class="app-title">Ticket Tracker</h1>
+          <span class="user-name" id="user-name"></span>
+        </div>
+      </div>
+      <button id="signout-btn" class="btn-signout">Sign out</button>
+    </header>
+
+    <nav class="range-nav">
+      <button class="range-btn active" data-range="today">Today</button>
+      <button class="range-btn" data-range="week">Week</button>
+      <button class="range-btn" data-range="month">Month</button>
+    </nav>
+
+    <section class="stats-grid" id="stats-grid">
+      <div class="stat-card stat-open">
+        <div class="stat-dot red-dot"></div>
+        <div class="stat-value" id="stat-open">0</div>
+        <div class="stat-label">Open</div>
+      </div>
+      <div class="stat-card stat-new">
+        <div class="stat-dot yellow-dot"></div>
+        <div class="stat-value" id="stat-new">0</div>
+        <div class="stat-label">New</div>
+      </div>
+      <div class="stat-card stat-team">
+        <div class="stat-dot blue-dot"></div>
+        <div class="stat-value" id="stat-team">0</div>
+        <div class="stat-label">Team</div>
+      </div>
+      <div class="stat-card stat-compliance">
+        <div class="stat-dot green-dot"></div>
+        <div class="stat-value" id="stat-compliance">0</div>
+        <div class="stat-label">Cmpl</div>
+      </div>
+      <div class="stat-card stat-escalation">
+        <div class="stat-dot brown-dot"></div>
+        <div class="stat-value" id="stat-escalation">0</div>
+        <div class="stat-label">Esc</div>
+      </div>
+      <div class="stat-card stat-closed">
+        <div class="stat-dot gray-dot"></div>
+        <div class="stat-value" id="stat-closed">0</div>
+        <div class="stat-label">Closed</div>
+      </div>
+      <div class="stat-card stat-total">
+        <div class="stat-dot total-dot">Σ</div>
+        <div class="stat-value" id="stat-total">0</div>
+        <div class="stat-label">Total</div>
+      </div>
+    </section>
+
+    <section class="chart-section">
+      <div class="chart-view-toggle">
+        <button class="chart-view-btn active" id="chart-view-tickets" data-view="tickets">Number of Tickets</button>
+        <button class="chart-view-btn" id="chart-view-payee" data-view="payee">Payee Issue Types</button>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="main-chart"></canvas>
+      </div>
+    </section>
+
+    <section class="panel-section">
+      <h2 class="panel-title">🏆 Weekly Leaderboard</h2>
+      <div id="leaderboard-list" class="leaderboard-list"></div>
+    </section>
+
+    <section class="panel-section">
+      <h2 class="panel-title">🎫 Recent Tickets</h2>
+      <div class="tickets-scroll">
+        <table class="tickets-table">
+          <thead>
+            <tr><th>Date</th><th>Ticket</th><th>Category</th><th>Payee Issue</th></tr>
+          </thead>
+          <tbody id="tickets-tbody"></tbody>
+        </table>
+      </div>
+      <p class="tickets-empty" id="tickets-empty" hidden>No tickets recorded for this period.</p>
+    </section>
+
+    <footer class="footer-note">
+      Synced from your Chrome extension account — refresh to pull the latest data.
+    </footer>
+  </div>
+
+  <script src="chart.min.js"></script>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

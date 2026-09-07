@@ -10,6 +10,7 @@
 let currentRange = 'today';
 let stats = null;
 let chartInstance = null;
+let chartViewMode = 'tickets'; // 'tickets' | 'payee'
 
 // Picker state
 let customRangeParams = null; // null means use rolling default
@@ -376,6 +377,17 @@ $('settings-btn').addEventListener('click', () => {
     $('settings-panel').setAttribute('aria-hidden', !$('settings-panel').classList.contains('open'));
 });
 
+// ── Home Dashboard Link ────────────────────────
+// Opens the web dashboard (stats + leaderboard) in a new tab, signed into
+// the same Google account/Firebase project the extension already syncs to.
+// Update DASHBOARD_URL once the dashboard is deployed — see web/README.md.
+const DASHBOARD_URL = 'https://zendesk-tracker-dashboard.vercel.app';
+if ($('home-btn')) {
+    $('home-btn').addEventListener('click', () => {
+        chrome.tabs.create({ url: DASHBOARD_URL });
+    });
+}
+
 $('save-name').addEventListener('click', () => {
     const name = $('agent-name-input').value.trim();
     chrome.runtime.sendMessage({ action: 'SET_AGENT_NAME', name }, () => {
@@ -668,10 +680,66 @@ function buildChartData() {
     };
 }
 
+// ── Payee Issue Type chart (top 6 for the currently active date range) ────
+// Mirrors whatever date/week/month is currently selected via the range
+// switcher + date picker — only the data source changes, not how the range
+// is chosen.
+function getActiveDateKeys() {
+    if (!stats) return [];
+    if (currentRange === 'today') {
+        return [(customRangeParams && customRangeParams.date) || stats.todayKey];
+    } else if (currentRange === 'week') {
+        return (stats.weekChart || []).map(d => d.date);
+    } else if (currentRange === 'month') {
+        return (stats.monthChart || []).map(d => d.date);
+    }
+    return [];
+}
+
+function buildPayeeIssueChartData() {
+    if (!stats) return null;
+    const activeDates = new Set(getActiveDateKeys());
+    const ticketLog = stats.ticketLog || [];
+    const payeeIssues = stats.ticketPayeeIssues || {};
+
+    // A ticket can appear more than once in the log (re-classified into a
+    // different category) — count its issue type only once per ticket.
+    const seenTickets = new Set();
+    const tally = new Map();
+    ticketLog.forEach(entry => {
+        if (!activeDates.has(entry.date)) return;
+        if (seenTickets.has(entry.ticketNumber)) return;
+        seenTickets.add(entry.ticketNumber);
+        const issue = payeeIssues[entry.ticketNumber];
+        if (!issue || issue === '-') return;
+        tally.set(issue, (tally.get(issue) || 0) + 1);
+    });
+
+    if (!tally.size) return null;
+
+    const top6 = Array.from(tally.entries())
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 6);
+
+    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c63ff').trim();
+
+    return {
+        labels: top6.map(([issue]) => issue),
+        datasets: [{
+            label: 'Payee Issue Types',
+            data: top6.map(([, count]) => count),
+            backgroundColor: hexToRgba(accent, 0.7),
+            borderColor: accent,
+            borderWidth: 1.5,
+            borderRadius: 4
+        }]
+    };
+}
+
 // ── Render chart ──────────────────────────────
 function renderChart() {
     const ctx = $('main-chart').getContext('2d');
-    const data = buildChartData();
+    const data = chartViewMode === 'payee' ? buildPayeeIssueChartData() : buildChartData();
 
     if (chartInstance) {
         chartInstance.destroy();
@@ -731,6 +799,17 @@ function renderChart() {
         }
     });
 }
+
+// ── Chart View Toggle (Number of Tickets / Payee Issue Types) ─────────────
+document.querySelectorAll('.chart-view-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.chart-view-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        chartViewMode = btn.dataset.view;
+        if ($('chart-legend-row')) $('chart-legend-row').style.display = (chartViewMode === 'payee') ? 'none' : '';
+        renderChart();
+    });
+});
 
 // ── Range switcher ────────────────────────────
 document.querySelectorAll('.range-btn').forEach(btn => {
