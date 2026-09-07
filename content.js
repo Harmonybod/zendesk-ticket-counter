@@ -263,6 +263,57 @@
 
     const UNDO_TYPE_LABELS = { open: 'Open', new: 'New', team: 'Team', compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed' };
 
+    // ── Button "Level" FX Profiles ────────────────
+    // Per-category thresholds, off *today's* count for that specific button
+    // (not a combined total) — each button levels up independently and
+    // resets naturally every day along with dailyTotals.
+    //   glass (baseline) → cracking → smoke → fire → buzzer → crowned
+    // fireStart/fireEnd are null for categories with no fire stage
+    // (Compliance goes straight from smoke to buzzer).
+    const BUTTON_FX_PROFILES = {
+        open: { crackStart: 15, crackFull: 21, smokeEnd: 25, fireStart: 25, fireEnd: 35, buzzerStart: 35, crown: 50, buzzerColor: '#ffd700' },
+        new: { crackStart: 15, crackFull: 21, smokeEnd: 25, fireStart: 25, fireEnd: 35, buzzerStart: 35, crown: 50, buzzerColor: '#ffd700' },
+        team: { crackStart: 15, crackFull: 21, smokeEnd: 25, fireStart: 25, fireEnd: 35, buzzerStart: 35, crown: 50, buzzerColor: '#ffd700' },
+        compliance: { crackStart: 3, crackFull: 5, smokeEnd: 15, fireStart: null, fireEnd: null, buzzerStart: 15, crown: 25, buzzerColor: '#2ecc71' },
+        escalation: { crackStart: 6, crackFull: 10, smokeEnd: 15, fireStart: 15, fireEnd: 20, buzzerStart: 20, crown: 30, buzzerColor: '#ffd700' },
+        closed: { crackStart: 6, crackFull: 10, smokeEnd: 15, fireStart: 15, fireEnd: 20, buzzerStart: 20, crown: 30, buzzerColor: '#ffd700' }
+    };
+
+    function getButtonFxStage(profile, n) {
+        if (n < profile.crackStart) return { stage: 'glass', progress: 0 };
+        if (n < profile.crackFull) return { stage: 'cracking', progress: (n - profile.crackStart) / (profile.crackFull - profile.crackStart) };
+        if (n < profile.smokeEnd) return { stage: 'smoke', progress: (n - profile.crackFull) / (profile.smokeEnd - profile.crackFull) };
+        if (profile.fireStart != null && n < profile.fireEnd) return { stage: 'fire', progress: (n - profile.fireStart) / (profile.fireEnd - profile.fireStart) };
+        if (n < profile.crown) return { stage: 'buzzer', progress: (n - profile.buzzerStart) / (profile.crown - profile.buzzerStart) };
+        return { stage: 'crowned', progress: 1 };
+    }
+
+    function localDateKey(d) {
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function updateButtonFx(btn, type, count) {
+        const profile = BUTTON_FX_PROFILES[type];
+        if (!profile) return;
+        const { stage, progress } = getButtonFxStage(profile, count || 0);
+        btn.dataset.fxStage = stage;
+        btn.style.setProperty('--fx-progress', progress.toFixed(3));
+    }
+
+    function refreshButtonFxAll() {
+        const overlay = document.getElementById(OVERLAY_ID);
+        if (!overlay || !chrome.storage || !chrome.storage.local) return;
+        chrome.storage.local.get(['dailyTotals'], (res) => {
+            if (chrome.runtime.lastError) return;
+            const todayTotals = (res.dailyTotals && res.dailyTotals[localDateKey(new Date())]) || {};
+            overlay.querySelectorAll('.zd-btn[data-type]').forEach(btn => {
+                const type = btn.getAttribute('data-type');
+                if (!BUTTON_FX_PROFILES[type]) return;
+                updateButtonFx(btn, type, todayTotals[type] || 0);
+            });
+        });
+    }
+
     // ── Create Overlay DOM ────────────────────────
     function createOverlay() {
         if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) {
@@ -297,9 +348,22 @@
                     const base = categoryColors[c.type] || c.base;
                     const tintLight = mixHexColors(base, '#ffffff', 0.18);
                     const tintDark = mixHexColors(base, '#000000', 0.22);
-                    const styleAttr = ` style="background: linear-gradient(135deg, ${tintLight} 0%, ${tintDark} 100%);"`;
+                    const fxProfile = BUTTON_FX_PROFILES[c.type];
+                    const buzzerColor = fxProfile ? fxProfile.buzzerColor : '#ffd700';
+                    const styleAttr = ` style="background: linear-gradient(135deg, ${tintLight} 0%, ${tintDark} 100%); --fx-buzzer-color: ${buzzerColor};"`;
                     const label = isCircle ? '' : c.label;
-                    return `<button class="zd-btn ${c.cls}${isCircle ? ' circle-mode' : ''}" data-type="${c.type}" title="${c.title}"${styleAttr}>${label}</button>`;
+                    const circleCls = isCircle ? ' circle-mode' : '';
+                    const fxHtml = `<span class="zd-fx" aria-hidden="true">
+              <span class="fx-glass"></span>
+              <span class="fx-crack"></span>
+              <span class="fx-smoke"></span>
+              <span class="fx-fire"></span>
+              <span class="fx-buzzer"></span>
+            </span>`;
+                    return `<span class="zd-btn-slot${circleCls}">
+            <button class="zd-btn ${c.cls}${circleCls}" data-type="${c.type}" title="${c.title}"${styleAttr} data-fx-stage="glass">${label}${fxHtml}</button>
+            <span class="fx-crown" aria-hidden="true">👑</span>
+          </span>`;
                 }).join('');
 
                 const undoBtnHtml = `<button class="zd-btn btn-undo${isCircle ? ' circle-mode' : ''}" data-type="undo" title="Undo Last Recorded Ticket">↩</button>`;
@@ -371,6 +435,7 @@
 
                             if (response && response.success) {
                                 showPlusAnimation(button, type);
+                                if (response.totals) updateButtonFx(button, type, response.totals[type] || 0);
 
                                 // Store to masterLogHistory & ticketPayeeIssues for Excel/Inspectors.
                                 // Routed through background.js's serialized write queue instead of
@@ -415,6 +480,7 @@
         }
         createOverlay();
         refreshOverlayDisplay();
+        refreshButtonFxAll();
     }, 1000);
 
 })();

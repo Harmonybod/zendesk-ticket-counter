@@ -776,10 +776,32 @@
   min-height: 0;
 }
 
+/* Wraps each category button so the crown badge (fx-crown) can float above
+   it — .zd-btn itself needs overflow:hidden for the existing hover-shine
+   sweep below, which would also clip a crown positioned outside the button.
+   The slot carries the flex-item sizing category buttons used to get
+   directly; .btn-undo has no slot and keeps sizing itself unchanged. */
+.zd-btn-slot {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 22px;
+  display: block;
+}
+
+.zd-btn-slot.circle-mode {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  flex: 0 0 auto;
+}
+
 .zd-btn {
   color: white;
   border: none;
   width: 100%;
+  height: 100%;
   padding: 5px 1px;
   font-size: 10px;
   font-weight: 700;
@@ -858,6 +880,168 @@
 
 .zd-btn:hover::after {
   transform: rotate(45deg) translateX(110%);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   BUTTON "LEVEL" FX — glass → crack → smoke → fire → buzzer → crown
+   Driven entirely by two things content.js sets on the button itself:
+     data-fx-stage   "glass" | "cracking" | "smoke" | "fire" | "buzzer" | "crowned"
+     --fx-progress   0-1, how far through the CURRENT stage the count is
+   Every layer's opacity is capped well under 1 (and blended with
+   mix-blend-mode: screen) so the button's own category color always shows
+   through — the point is a color-coded button that's *also* on fire, not
+   a fire icon hiding which category it is.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.zd-fx {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+}
+
+.fx-glass,
+.fx-crack,
+.fx-smoke,
+.fx-fire,
+.fx-buzzer {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+}
+
+/* Always-on subtle glass shine — the "normal transparent glass" baseline
+   look before any cracking starts, and it stays underneath every later
+   stage too (real cracked/smoked/burning glass still catches light). */
+.fx-glass {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.32) 0%, rgba(255, 255, 255, 0.05) 35%, rgba(255, 255, 255, 0) 60%);
+  opacity: 0.8;
+}
+
+.fx-crack {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15 M23 19 L15 29 L19 37 M23 19 L31 31 M15 29 L6 33" stroke="white" stroke-width="1.4" fill="none"/></svg>');
+  background-size: 100% 100%;
+  background-position: center;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transition: opacity 0.4s ease;
+}
+
+.fx-smoke {
+  overflow: hidden;
+}
+
+.fx-smoke::before,
+.fx-smoke::after {
+  content: '';
+  position: absolute;
+  bottom: 6%;
+  width: 55%;
+  height: 55%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(150, 150, 150, 0.7) 0%, rgba(150, 150, 150, 0) 70%);
+  filter: blur(1.5px);
+  animation: zd-fx-smoke-drift 2.6s ease-in-out infinite;
+  opacity: 0;
+}
+
+.fx-smoke::before { left: 6%; animation-delay: 0s; }
+.fx-smoke::after { left: 40%; animation-delay: 1.3s; }
+
+@keyframes zd-fx-smoke-drift {
+  0%   { transform: translateY(0) scale(0.6); opacity: 0.85; }
+  60%  { transform: translateY(-70%) scale(1.15); opacity: 0.4; }
+  100% { transform: translateY(-110%) scale(0.7); opacity: 0; }
+}
+
+.fx-fire {
+  top: auto;
+  bottom: 0;
+  height: 70%;
+  background: radial-gradient(ellipse at bottom, #fff3b0 0%, #ffb703 30%, #fb5607 60%, rgba(251, 86, 7, 0) 82%);
+  opacity: 0;
+  transform-origin: bottom center;
+  animation: zd-fx-fire-flicker 0.45s ease-in-out infinite alternate;
+}
+
+@keyframes zd-fx-fire-flicker {
+  0%   { transform: scaleY(0.88) scaleX(0.94) translateY(0); }
+  50%  { transform: scaleY(1.08) scaleX(1.04) translateY(-3%); }
+  100% { transform: scaleY(0.96) scaleX(1) translateY(-1%); }
+}
+
+/* Buzzer color (gold by default, green for Compliance) is set inline by
+   content.js at button-creation time via --fx-buzzer-color. */
+.fx-buzzer {
+  background: radial-gradient(circle, var(--fx-buzzer-color, #ffd700) 0%, rgba(255, 215, 0, 0) 72%);
+  opacity: 0;
+  animation: zd-fx-buzzer-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes zd-fx-buzzer-pulse {
+  0%, 100% { transform: scale(0.88); }
+  50%      { transform: scale(1.18); }
+}
+
+/* Sits outside .zd-btn (a sibling in .zd-btn-slot) specifically so it can
+   float above the button without being clipped by .zd-btn's own
+   overflow:hidden (needed for the hover-shine sweep above). */
+.fx-crown {
+  position: absolute;
+  /* The overlay itself clips overflow, and horizontal-mode only has 8px of
+     padding above the buttons row — keep this within that so the crown
+     never gets clipped at the overlay's own edge. */
+  top: -7px;
+  left: 50%;
+  transform: translateX(-50%) scale(0.5);
+  font-size: 13px;
+  line-height: 1;
+  opacity: 0;
+  pointer-events: none;
+  filter: drop-shadow(0 0 4px rgba(255, 215, 0, 0.85));
+  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(.34, 1.56, .64, 1);
+  z-index: 2;
+}
+
+.zd-btn.circle-mode ~ .fx-crown {
+  top: -6px;
+  font-size: 11px;
+}
+
+/* ── Stage-driven intensity — ramps via --fx-progress (0-1) ─────────────── */
+.zd-btn[data-fx-stage="cracking"] .fx-crack {
+  opacity: calc(var(--fx-progress, 0) * 0.85);
+}
+
+.zd-btn[data-fx-stage="smoke"] .fx-crack,
+.zd-btn[data-fx-stage="fire"] .fx-crack,
+.zd-btn[data-fx-stage="buzzer"] .fx-crack,
+.zd-btn[data-fx-stage="crowned"] .fx-crack {
+  opacity: 0.85;
+}
+
+.zd-btn[data-fx-stage="smoke"] .fx-smoke::before,
+.zd-btn[data-fx-stage="smoke"] .fx-smoke::after {
+  opacity: calc(0.25 + var(--fx-progress, 0) * 0.5);
+}
+
+.zd-btn[data-fx-stage="fire"] .fx-fire {
+  opacity: calc(0.45 + var(--fx-progress, 0) * 0.4);
+}
+
+.zd-btn[data-fx-stage="buzzer"] .fx-buzzer {
+  opacity: calc(0.3 + var(--fx-progress, 0) * 0.6);
+}
+
+.zd-btn[data-fx-stage="crowned"] ~ .fx-crown {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+  animation: zd-fx-crown-bob 2s ease-in-out infinite;
+}
+
+@keyframes zd-fx-crown-bob {
+  0%, 100% { transform: translateX(-50%) scale(1) rotate(-6deg) translateY(0); }
+  50%      { transform: translateX(-50%) scale(1) rotate(6deg) translateY(-3px); }
 }
 
 .zd-toast-notification {
@@ -959,12 +1143,19 @@
   flex-grow: 0;
 }
 
+#zd-tracker-overlay.horizontal-mode .zd-btn-slot {
+  width: auto;
+  min-width: 42px;
+  flex: 0 0 auto;
+}
+
 #zd-tracker-overlay.horizontal-mode .zd-btn {
   width: auto;
   min-width: 42px;
   flex: 0 0 auto;
 }
 
+#zd-tracker-overlay.horizontal-mode .zd-btn-slot.circle-mode,
 #zd-tracker-overlay.horizontal-mode .zd-btn.circle-mode {
   min-width: 28px;
 }
