@@ -285,7 +285,9 @@ function renderChart() {
             maintainAspectRatio: false,
             animation: { duration: 350, easing: 'easeInOutQuart' },
             plugins: {
-                legend: { display: chartViewMode === 'payee' ? false : true, labels: { color: '#ececec', font: { size: 10 }, boxWidth: 10 } },
+                // The bigger standalone .chart-legend chips replace Chart.js's
+                // own built-in legend — no need to render both.
+                legend: { display: false },
                 tooltip: {
                     backgroundColor: 'rgba(14,14,16,0.95)',
                     borderColor: 'rgba(255,255,255,0.14)',
@@ -385,6 +387,7 @@ document.querySelectorAll('.chart-view-btn').forEach(btn => {
         document.querySelectorAll('.chart-view-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         chartViewMode = btn.dataset.view;
+        $('chart-legend-row').style.display = (chartViewMode === 'payee') ? 'none' : '';
         renderChart();
     });
 });

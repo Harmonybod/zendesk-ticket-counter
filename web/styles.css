@@ -203,7 +203,7 @@ h1, h2 { font-weight: 700; }
   display: flex;
   gap: 8px;
   padding: 16px 18px 8px;
-  max-width: 720px;
+  max-width: 820px;
   margin: 0 auto;
 }
 
@@ -235,10 +235,10 @@ h1, h2 { font-weight: 700; }
 /* ── Stat Cards ───────────────────────────────────────────────────────── */
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 8px;
-  padding: 8px 18px;
-  max-width: 720px;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 12px;
+  padding: 8px 18px 4px;
+  max-width: 820px;
   margin: 0 auto;
 }
 
@@ -246,38 +246,44 @@ h1, h2 { font-weight: 700; }
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  padding: 14px 6px 12px;
+  padding: 20px 10px 16px;
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  transition: border-color 0.2s, transform 0.15s;
+}
+
+.stat-card:hover {
+  border-color: var(--border-h);
+  transform: translateY(-2px);
 }
 
 .stat-dot {
-  width: 10px;
-  height: 10px;
+  width: 16px;
+  height: 16px;
   border-radius: 50%;
 }
 
-.red-dot { background: var(--red); box-shadow: 0 0 6px var(--red-glow); }
-.yellow-dot { background: var(--yellow); box-shadow: 0 0 6px var(--yellow-glow); }
-.blue-dot { background: var(--blue); box-shadow: 0 0 6px var(--blue-glow); }
-.green-dot { background: var(--green); box-shadow: 0 0 6px var(--green-glow); }
-.brown-dot { background: var(--brown); box-shadow: 0 0 6px var(--brown-glow); }
-.gray-dot { background: var(--gray); box-shadow: 0 0 6px var(--gray-glow); }
+.red-dot { background: var(--red); box-shadow: 0 0 10px var(--red-glow); }
+.yellow-dot { background: var(--yellow); box-shadow: 0 0 10px var(--yellow-glow); }
+.blue-dot { background: var(--blue); box-shadow: 0 0 10px var(--blue-glow); }
+.green-dot { background: var(--green); box-shadow: 0 0 10px var(--green-glow); }
+.brown-dot { background: var(--brown); box-shadow: 0 0 10px var(--brown-glow); }
+.gray-dot { background: var(--gray); box-shadow: 0 0 10px var(--gray-glow); }
 
 .total-dot {
   background: linear-gradient(135deg, var(--accent), #3ecfcf);
   width: auto;
-  padding: 0 5px;
-  border-radius: 4px;
-  font-size: 9px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 12px;
   font-weight: 700;
   color: #fff;
 }
 
 .stat-value {
-  font-size: 22px;
+  font-size: 30px;
   font-weight: 800;
   letter-spacing: -0.5px;
 }
@@ -291,7 +297,7 @@ h1, h2 { font-weight: 700; }
 .stat-total .stat-value { color: var(--text-1); }
 
 .stat-label {
-  font-size: 9.5px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-3);
   text-transform: uppercase;
@@ -301,7 +307,7 @@ h1, h2 { font-weight: 700; }
 /* ── Chart ────────────────────────────────────────────────────────────── */
 .chart-section {
   padding: 10px 18px;
-  max-width: 720px;
+  max-width: 820px;
   margin: 0 auto;
 }
 
@@ -336,6 +342,35 @@ h1, h2 { font-weight: 700; }
   color: var(--text-1);
 }
 
+/* Bigger, standalone legend — the web dashboard has the room the popup
+   doesn't, so these chips are sized for easy reading, not squeezed in. */
+.chart-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.legend-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-1);
+}
+
+.legend-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
 .chart-wrap {
   background: var(--bg-card);
   border: 1px solid var(--border);
@@ -348,7 +383,7 @@ h1, h2 { font-weight: 700; }
 /* ── Panels (Leaderboard / Tickets) ───────────────────────────────────── */
 .panel-section {
   padding: 10px 18px;
-  max-width: 720px;
+  max-width: 820px;
   margin: 0 auto;
 }
 
@@ -470,7 +505,11 @@ h1, h2 { font-weight: 700; }
 
 /* ── Mobile ───────────────────────────────────────────────────────────── */
 @media (max-width: 480px) {
-  .stats-grid { grid-template-columns: repeat(3, 1fr); }
-  .stat-value { font-size: 19px; }
+  .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-card { padding: 14px 6px 12px; gap: 6px; }
+  .stat-dot { width: 12px; height: 12px; }
+  .stat-value { font-size: 22px; }
+  .stat-label { font-size: 10px; }
+  .legend-chip { padding: 6px 11px; font-size: 12px; }
   .chart-wrap { height: 220px; padding: 12px; }
 }
