@@ -268,6 +268,38 @@ function mergeTicketLogs(local, remote) {
   return Array.from(map.values()).sort((a, b) => a.timestamp - b.timestamp);
 }
 
+/**
+ * Merge two masterLogHistory arrays (entries: { ticketId, category, timestamp }).
+ * Dedup key: ticketId + category + timestamp — same shape of union-merge as
+ * mergeTicketLogs, so a ticket handled on two devices before either syncs
+ * keeps both real entries instead of one clobbering the other.
+ */
+function mergeMasterLogHistory(local, remote) {
+  const map = new Map();
+
+  const addEntries = (entries) => {
+    for (const entry of entries) {
+      const key = `${entry.ticketId}:${entry.category}:${entry.timestamp}`;
+      map.set(key, entry);
+    }
+  };
+
+  addEntries(local || []);
+  addEntries(remote || []);
+
+  return Array.from(map.values()).sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
+}
+
+/**
+ * Merge two ticketPayeeIssues maps ({ ticketId: issueText }). There's no
+ * per-key timestamp to arbitrate conflicts, so this is a plain key union —
+ * conflicts are rare (a ticket's payee issue type doesn't normally change
+ * once captured) and the local device's own just-captured value wins.
+ */
+function mergeTicketPayeeIssues(local, remote) {
+  return { ...(remote || {}), ...(local || {}) };
+}
+
 // ── Firestore Read/Write (authenticated) ──────
 
 /**

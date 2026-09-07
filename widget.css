@@ -552,130 +552,6 @@
   display: none !important;
 }
 
-/* ── Telegram Note Button & Input ───────────────────────────────────────── */
-
-/* Purple/Telegram Blue - Send Note Button */
-.ztk-btn-note {
-  background: radial-gradient(circle at 35% 35%, #9b59b6, #8e44ad);
-  box-shadow: 
-    0 4px 16px rgba(142, 68, 173, 0.45), 
-    0 0 0 3px rgba(155, 89, 182, 0.12);
-  margin-top: 4px;
-}
-
-.ztk-btn-note:hover {
-  box-shadow: 
-    0 6px 24px rgba(142, 68, 173, 0.65), 
-    0 0 0 4px rgba(155, 89, 182, 0.22);
-  filter: brightness(1.1);
-}
-
-.ztk-btn-note svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: #ffffff;
-  stroke-width: 2.5;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Expandable Note Input Container */
-#ztk-note-container {
-  position: absolute;
-  right: calc(100% + 12px);
-  top: 50%;
-  transform: translateY(-50%) scale(0.95);
-  transform-origin: right center;
-  background: rgba(15, 18, 35, 0.95);
-  border: 1px solid rgba(155, 89, 182, 0.4);
-  border-radius: 12px;
-  padding: 8px;
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.6);
-  opacity: 0;
-  pointer-events: none;
-  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
-  width: 260px;
-}
-
-#ztk-note-container.ztk-show {
-  opacity: 1;
-  pointer-events: auto;
-  transform: translateY(-50%) scale(1);
-}
-
-#ztk-note-input {
-  flex: 1;
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 8px;
-  color: #fff;
-  font-family: inherit;
-  font-size: 13px;
-  padding: 8px 10px;
-  outline: none;
-  resize: none;
-  height: 36px;
-  line-height: 1.4;
-  overflow: hidden;
-  transition: border-color 0.2s;
-}
-
-#ztk-note-input::placeholder {
-  color: rgba(255, 255, 255, 0.3);
-}
-
-#ztk-note-input:focus {
-  border-color: #9b59b6;
-  background: rgba(255, 255, 255, 0.08);
-}
-
-#ztk-note-send {
-  background: linear-gradient(135deg, #9b59b6, #8e44ad);
-  border: none;
-  border-radius: 8px;
-  width: 36px;
-  height: 36px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: all 0.2s;
-}
-
-#ztk-note-send svg {
-  width: 16px;
-  height: 16px;
-  fill: #fff;
-}
-
-#ztk-note-send:hover {
-  transform: scale(1.05);
-  box-shadow: 0 4px 12px rgba(155, 89, 182, 0.4);
-}
-
-#ztk-note-send:active {
-  transform: scale(0.95);
-}
-
-#ztk-note-send.ztk-loading {
-  opacity: 0.7;
-  pointer-events: none;
-}
-
-#ztk-note-send.ztk-loading svg {
-  animation: ztk-spin 1s infinite linear;
-}
-
-@keyframes ztk-spin {
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-}
-
 /* ══════════════════════════════════════════════════════════════════════════
    PREMIUM SLENDER FLOATING OVERLAY MENUBAR
    ══════════════════════════════════════════════════════════════════════════ */
@@ -860,15 +736,21 @@
   box-shadow: 0 3px 8px rgba(149, 165, 166, 0.3);
 }
 
-.btn-remove-all {
-  background: linear-gradient(135deg, #dc2626 0%, #991b1b 100%) !important;
-  box-shadow: 0 3px 8px rgba(220, 38, 38, 0.3) !important;
-  font-weight: 900;
+.btn-team {
+  background: linear-gradient(135deg, #74b9ff 0%, #2980b9 100%);
+  box-shadow: 0 3px 8px rgba(116, 185, 255, 0.3);
+}
+
+.btn-undo {
+  background: linear-gradient(135deg, #64748b 0%, #475569 100%) !important;
+  box-shadow: 0 3px 8px rgba(100, 116, 139, 0.35) !important;
+  font-size: 14px !important;
+  font-weight: 700;
   margin-top: 4px;
 }
 
-.btn-remove-all:hover {
-  box-shadow: 0 3px 12px rgba(220, 38, 38, 0.5) !important;
+.btn-undo:hover {
+  box-shadow: 0 3px 12px rgba(100, 116, 139, 0.55) !important;
 }
 
 .zd-btn::after {
@@ -906,4 +788,93 @@
   15% { top: 24px; opacity: 1; }
   85% { top: 24px; opacity: 1; }
   100% { top: -60px; opacity: 0; }
+}
+
+/* ── Circle Button Shape Mode ────────────────────────────────────────────── */
+.zd-buttons.circle-mode {
+  align-items: center;
+  gap: 8px;
+}
+
+.zd-btn.circle-mode {
+  width: 28px;
+  height: 28px;
+  min-height: 28px;
+  min-width: 28px;
+  max-width: 28px;
+  padding: 0;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  font-size: 0;
+}
+
+.zd-btn.circle-mode.btn-undo {
+  margin-top: 0;
+}
+
+/* ── Horizontal Layout Mode ──────────────────────────────────────────────── */
+/* Toggled by double-clicking the drag handle. Switches the floater from a
+   vertical column to a horizontal row. Position (top/left) is left as-is —
+   the widget stays where it was dragged to.                                */
+#zd-tracker-overlay.horizontal-mode {
+  flex-direction: row;
+  align-items: center;
+  width: auto;
+  max-width: min(480px, 92vw);
+  min-width: unset;
+  height: auto;
+  min-height: unset;
+  max-height: unset;
+  resize: none;
+  padding: 8px 10px;
+  gap: 8px;
+}
+
+/* Same 3-bar grip as vertical mode, just rotated: 3 short vertical bars laid
+   out side-by-side instead of 3 horizontal bars stacked on top of each other. */
+#zd-tracker-overlay.horizontal-mode .zd-drag-handle {
+  width: 12px;
+  height: 22px;
+  flex-direction: row;
+  justify-content: space-between;
+  align-items: center;
+  align-self: center;
+  flex-shrink: 0;
+}
+
+#zd-tracker-overlay.horizontal-mode .zd-drag-handle span {
+  width: 2px;
+  height: 100%;
+  background: linear-gradient(180deg, #38bdf8, #a855f7);
+}
+
+#zd-tracker-overlay.horizontal-mode #zd-current-ticket,
+#zd-tracker-overlay.horizontal-mode #zd-issue-preview-container {
+  width: auto;
+  flex-shrink: 0;
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+#zd-tracker-overlay.horizontal-mode .zd-buttons {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  width: auto;
+  flex-grow: 0;
+}
+
+#zd-tracker-overlay.horizontal-mode .zd-btn {
+  width: auto;
+  min-width: 42px;
+  flex: 0 0 auto;
+}
+
+#zd-tracker-overlay.horizontal-mode .zd-btn.circle-mode {
+  min-width: 28px;
+}
+
+#zd-tracker-overlay.horizontal-mode .btn-undo {
+  margin-top: 0;
 }

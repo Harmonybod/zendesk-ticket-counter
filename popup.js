@@ -26,6 +26,11 @@ const COLORS = {
     escalation: { bg: 'rgba(181,114,62,0.85)', border: '#b5723e' },
     closed: { bg: 'rgba(149,165,166,0.85)', border: '#95a5a6' }
 };
+const DEFAULT_CATEGORY_HEX = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, v.border]));
+const CATEGORY_TO_CSS_VAR = { open: 'red', new: 'yellow', team: 'blue', compliance: 'green', escalation: 'brown', closed: 'gray' };
+
+// ── Feature Toggle State ──────────────────────
+let teamButtonEnabled = false;
 
 // ── Utility ───────────────────────────────────
 function $(id) { return document.getElementById(id); }
@@ -50,6 +55,82 @@ function fmtDateKey(d) {
 function fmtShortDateStr(dateStr) {
     const [, m, d] = dateStr.split('-');
     return `${parseInt(m)}/${parseInt(d)}`;
+}
+
+// ── Accent Color Helpers ──────────────────────
+function hexToRgb(hex) {
+    const h = hex.replace('#', '');
+    const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
+    const num = parseInt(full, 16);
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+}
+
+function hexToRgba(hex, alpha) {
+    const { r, g, b } = hexToRgb(hex);
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function mixHex(hexA, hexB, ratio) {
+    const a = hexToRgb(hexA), b = hexToRgb(hexB);
+    const mix = (x, y) => Math.round(x + (y - x) * ratio);
+    const toHex = (v) => v.toString(16).padStart(2, '0');
+    return `#${toHex(mix(a.r, b.r))}${toHex(mix(a.g, b.g))}${toHex(mix(a.b, b.b))}`;
+}
+
+// Applies (or clears) a user-chosen accent color across the dashboard:
+// stat dots, legend dots, progress bars, and chart colors all read the
+// --red/--yellow/--blue/--green/--brown/--gray CSS variables, so tinting
+// those (plus --accent itself) re-themes the whole popup in one pass.
+function applyAccentColor(color) {
+    const root = document.documentElement;
+    if (color) {
+        root.style.setProperty('--accent', color);
+        const { r, g, b } = hexToRgb(color);
+        root.style.setProperty('--accent-dim', `rgba(${r}, ${g}, ${b}, 0.18)`);
+        Object.entries(DEFAULT_CATEGORY_HEX).forEach(([key, baseHex]) => {
+            const tinted = mixHex(baseHex, color, 0.35);
+            COLORS[key] = { bg: hexToRgba(tinted, 0.85), border: tinted };
+            const varName = CATEGORY_TO_CSS_VAR[key];
+            root.style.setProperty(`--${varName}`, tinted);
+            root.style.setProperty(`--${varName}-glow`, hexToRgba(tinted, 0.2));
+        });
+    } else {
+        root.style.removeProperty('--accent');
+        root.style.removeProperty('--accent-dim');
+        Object.entries(DEFAULT_CATEGORY_HEX).forEach(([key, baseHex]) => {
+            COLORS[key] = { bg: hexToRgba(baseHex, 0.85), border: baseHex };
+            const varName = CATEGORY_TO_CSS_VAR[key];
+            root.style.removeProperty(`--${varName}`);
+            root.style.removeProperty(`--${varName}-glow`);
+        });
+    }
+    if (chartInstance) renderChart();
+}
+
+// ── Team Button Feature Visibility ────────────
+function applyTeamVisibility(enabled) {
+    document.querySelectorAll('.stat-card.stat-team').forEach(el => { el.style.display = enabled ? 'flex' : 'none'; });
+    document.querySelectorAll('.col-team').forEach(el => { el.style.display = enabled ? 'table-cell' : 'none'; });
+    document.querySelectorAll('.team-legend-item').forEach(el => { el.style.display = enabled ? 'inline-flex' : 'none'; });
+}
+
+// ── Load New Feature Settings (Tap Mode, Shape, Team Button, Accent) ──────
+function loadFeatureSettings() {
+    chrome.storage.local.get(['tapMode', 'buttonShape', 'teamButtonEnabled', 'userAccentColor'], (res) => {
+        if (chrome.runtime.lastError) return;
+
+        if ($('tap-mode-toggle')) $('tap-mode-toggle').setAttribute('aria-checked', res.tapMode === 'double' ? 'true' : 'false');
+        if ($('button-shape-toggle')) $('button-shape-toggle').setAttribute('aria-checked', res.buttonShape === 'circle' ? 'true' : 'false');
+
+        teamButtonEnabled = !!res.teamButtonEnabled;
+        if ($('team-button-toggle')) $('team-button-toggle').setAttribute('aria-checked', teamButtonEnabled ? 'true' : 'false');
+        applyTeamVisibility(teamButtonEnabled);
+
+        if ($('accent-color-input')) $('accent-color-input').value = res.userAccentColor || '#6c63ff';
+        applyAccentColor(res.userAccentColor || null);
+
+        renderStats();
+    });
 }
 
 // ── Auth Flow ─────────────────────────────────
@@ -194,6 +275,7 @@ function loadStats(callback) {
             applyTheme(stats.theme);
             applySettingsUI();
             renderPremiumAnalytics();
+            renderWeeklyLeaderboard();
             if (callback) callback();
         });
     } else {
@@ -291,6 +373,58 @@ $('theme-toggle').addEventListener('click', () => {
     });
 });
 
+// ── Tap Mode Toggle ────────────────────────────
+if ($('tap-mode-toggle')) {
+    $('tap-mode-toggle').addEventListener('click', () => {
+        const btn = $('tap-mode-toggle');
+        const isDouble = btn.getAttribute('aria-checked') !== 'true';
+        btn.setAttribute('aria-checked', isDouble);
+        chrome.storage.local.set({ tapMode: isDouble ? 'double' : 'single' });
+    });
+}
+
+// ── Button Shape Toggle ────────────────────────
+if ($('button-shape-toggle')) {
+    $('button-shape-toggle').addEventListener('click', () => {
+        const btn = $('button-shape-toggle');
+        const isCircle = btn.getAttribute('aria-checked') !== 'true';
+        btn.setAttribute('aria-checked', isCircle);
+        chrome.storage.local.set({ buttonShape: isCircle ? 'circle' : 'rectangle' });
+    });
+}
+
+// ── Team Button Toggle ────────────────────────
+if ($('team-button-toggle')) {
+    $('team-button-toggle').addEventListener('click', () => {
+        const btn = $('team-button-toggle');
+        const isEnabled = btn.getAttribute('aria-checked') !== 'true';
+        btn.setAttribute('aria-checked', isEnabled);
+        teamButtonEnabled = isEnabled;
+        chrome.storage.local.set({ teamButtonEnabled: isEnabled });
+        applyTeamVisibility(isEnabled);
+        renderStats();
+        if (chartInstance) renderChart();
+    });
+}
+
+// ── Accent Color Picker ────────────────────────
+if ($('accent-color-input')) {
+    $('accent-color-input').addEventListener('input', (e) => {
+        const color = e.target.value;
+        chrome.storage.local.set({ userAccentColor: color });
+        applyAccentColor(color);
+    });
+}
+
+if ($('accent-color-reset')) {
+    $('accent-color-reset').addEventListener('click', () => {
+        chrome.storage.local.remove('userAccentColor');
+        if ($('accent-color-input')) $('accent-color-input').value = '#6c63ff';
+        applyAccentColor(null);
+        showToast('✓ Accent color reset');
+    });
+}
+
 // ── Telegram Settings ─────────────────────────
 $('save-tg-btn').addEventListener('click', () => {
     const tgToken = $('tg-token-input').value.trim();
@@ -352,7 +486,9 @@ function renderStats() {
     // All-time
     const at = stats.allTime;
     $('alltime-total').textContent = at.total ?? 0;
-    $('alltime-sub').textContent = `Open: ${at.open ?? 0} · New: ${at.new ?? 0} · Team: ${at.team ?? 0} · Cmpl: ${at.compliance ?? 0} · Esc: ${at.escalation ?? 0} · Closed: ${at.closed ?? 0}`;
+    $('alltime-sub').textContent = teamButtonEnabled
+        ? `Open: ${at.open ?? 0} · New: ${at.new ?? 0} · Team: ${at.team ?? 0} · Cmpl: ${at.compliance ?? 0} · Esc: ${at.escalation ?? 0} · Closed: ${at.closed ?? 0}`
+        : `Open: ${at.open ?? 0} · New: ${at.new ?? 0} · Cmpl: ${at.compliance ?? 0} · Esc: ${at.escalation ?? 0} · Closed: ${at.closed ?? 0}`;
 
     renderLastTicket();
 }
@@ -402,17 +538,16 @@ function buildChartData() {
     if (currentRange === 'today') {
         if (!customRangeParams) {
             const d = stats.today;
-            return {
-                labels: ['Today'],
-                datasets: [
-                    { label: 'Open', data: [d.open ?? 0], backgroundColor: COLORS.open.bg, borderColor: COLORS.open.border, borderWidth: 1.5, borderRadius: 4 },
-                    { label: 'New', data: [d.new ?? 0], backgroundColor: COLORS.new.bg, borderColor: COLORS.new.border, borderWidth: 1.5, borderRadius: 4 },
-                    { label: 'Team', data: [d.team ?? 0], backgroundColor: COLORS.team.bg, borderColor: COLORS.team.border, borderWidth: 1.5, borderRadius: 4 },
-                    { label: 'Compliance', data: [d.compliance ?? 0], backgroundColor: COLORS.compliance.bg, borderColor: COLORS.compliance.border, borderWidth: 1.5, borderRadius: 4 },
-                    { label: 'Escalation', data: [d.escalation ?? 0], backgroundColor: COLORS.escalation.bg, borderColor: COLORS.escalation.border, borderWidth: 1.5, borderRadius: 4 },
-                    { label: 'Closed', data: [d.closed ?? 0], backgroundColor: COLORS.closed.bg, borderColor: COLORS.closed.border, borderWidth: 1.5, borderRadius: 4 }
-                ]
-            };
+            let datasets = [
+                { label: 'Open', data: [d.open ?? 0], backgroundColor: COLORS.open.bg, borderColor: COLORS.open.border, borderWidth: 1.5, borderRadius: 4 },
+                { label: 'New', data: [d.new ?? 0], backgroundColor: COLORS.new.bg, borderColor: COLORS.new.border, borderWidth: 1.5, borderRadius: 4 },
+                { label: 'Team', data: [d.team ?? 0], backgroundColor: COLORS.team.bg, borderColor: COLORS.team.border, borderWidth: 1.5, borderRadius: 4 },
+                { label: 'Compliance', data: [d.compliance ?? 0], backgroundColor: COLORS.compliance.bg, borderColor: COLORS.compliance.border, borderWidth: 1.5, borderRadius: 4 },
+                { label: 'Escalation', data: [d.escalation ?? 0], backgroundColor: COLORS.escalation.bg, borderColor: COLORS.escalation.border, borderWidth: 1.5, borderRadius: 4 },
+                { label: 'Closed', data: [d.closed ?? 0], backgroundColor: COLORS.closed.bg, borderColor: COLORS.closed.border, borderWidth: 1.5, borderRadius: 4 }
+            ];
+            if (!teamButtonEnabled) datasets = datasets.filter(ds => ds.label !== 'Team');
+            return { labels: ['Today'], datasets };
         } else {
             chartData = stats.todayChart;
         }
@@ -422,16 +557,19 @@ function buildChartData() {
 
     if (!chartData || !chartData.length) return null;
 
+    let datasets = [
+        { label: 'Open', data: chartData.map(d => d.open ?? 0), backgroundColor: COLORS.open.bg, borderColor: COLORS.open.border, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'New', data: chartData.map(d => d.new ?? 0), backgroundColor: COLORS.new.bg, borderColor: COLORS.new.border, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'Team', data: chartData.map(d => d.team ?? 0), backgroundColor: COLORS.team.bg, borderColor: COLORS.team.border, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'Compliance', data: chartData.map(d => d.compliance ?? 0), backgroundColor: COLORS.compliance.bg, borderColor: COLORS.compliance.border, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'Escalation', data: chartData.map(d => d.escalation ?? 0), backgroundColor: COLORS.escalation.bg, borderColor: COLORS.escalation.border, borderWidth: 1.5, borderRadius: 3 },
+        { label: 'Closed', data: chartData.map(d => d.closed ?? 0), backgroundColor: COLORS.closed.bg, borderColor: COLORS.closed.border, borderWidth: 1.5, borderRadius: 3 }
+    ];
+    if (!teamButtonEnabled) datasets = datasets.filter(ds => ds.label !== 'Team');
+
     return {
         labels: chartData.map(d => fmtShortDateStr(d.date)),
-        datasets: [
-            { label: 'Open', data: chartData.map(d => d.open ?? 0), backgroundColor: COLORS.open.bg, borderColor: COLORS.open.border, borderWidth: 1.5, borderRadius: 3 },
-            { label: 'New', data: chartData.map(d => d.new ?? 0), backgroundColor: COLORS.new.bg, borderColor: COLORS.new.border, borderWidth: 1.5, borderRadius: 3 },
-            { label: 'Team', data: chartData.map(d => d.team ?? 0), backgroundColor: COLORS.team.bg, borderColor: COLORS.team.border, borderWidth: 1.5, borderRadius: 3 },
-            { label: 'Compliance', data: chartData.map(d => d.compliance ?? 0), backgroundColor: COLORS.compliance.bg, borderColor: COLORS.compliance.border, borderWidth: 1.5, borderRadius: 3 },
-            { label: 'Escalation', data: chartData.map(d => d.escalation ?? 0), backgroundColor: COLORS.escalation.bg, borderColor: COLORS.escalation.border, borderWidth: 1.5, borderRadius: 3 },
-            { label: 'Closed', data: chartData.map(d => d.closed ?? 0), backgroundColor: COLORS.closed.bg, borderColor: COLORS.closed.border, borderWidth: 1.5, borderRadius: 3 }
-        ]
+        datasets
     };
 }
 
@@ -750,7 +888,7 @@ function triggerDownload(content, filename, mimeType) {
     URL.revokeObjectURL(url);
 }
 
-$('export-csv').addEventListener('click', () => {
+function handleCsvExport() {
     // Build a human-readable filename that reflects the selected period
     let fileLabel = new Date().toISOString().split('T')[0]; // default: today
     if (customRangeParams) {
@@ -784,7 +922,10 @@ $('export-csv').addEventListener('click', () => {
         triggerDownload(response.data, `tickets-${fileLabel}.csv`, 'text/csv');
         showToast('✓ CSV exported');
     });
-});
+}
+
+$('export-csv').addEventListener('click', handleCsvExport);
+if ($('shift-download-csv')) $('shift-download-csv').addEventListener('click', handleCsvExport);
 
 $('export-json').addEventListener('click', () => {
     chrome.runtime.sendMessage({ action: 'EXPORT', format: 'json' }, (response) => {
@@ -794,6 +935,13 @@ $('export-json').addEventListener('click', () => {
         showToast('✓ JSON exported');
     });
 });
+
+if ($('export-xls')) {
+    $('export-xls').addEventListener('click', () => {
+        exportSingleDaySpreadsheet(fmtDateKey(new Date()));
+        showToast('✓ Excel Spreadsheet generated');
+    });
+}
 
 // ── Detailed Chart Modal ──────────────────────
 let detailChartInstance = null;
@@ -872,7 +1020,8 @@ function renderDetailChart(response) {
     }
 
     const labels = chartData.map(d => d.label);
-    const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+    let ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+    if (!teamButtonEnabled) ALL_TYPES = ALL_TYPES.filter(t => t !== 'team');
     const TYPE_LABELS = { open: 'Open', new: 'New', team: 'Team', compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed' };
 
     const datasets = ALL_TYPES.map(t => ({
@@ -1016,109 +1165,72 @@ $('detail-date-input').addEventListener('change', (e) => {
 let localStoredStats = null;
 let rawMasterLogsList = [];
 
-// ── XML Excel Exporter ────────────────────────────────────────────────────
-function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, dateStr, filenameMonthName, displayDay, displayYear, openArr, newArr, teamArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
-    const maxContentRows = Math.max(1, openArr.length, newArr.length, teamArr.length, complianceArr.length, escalationsArr.length, closedArr.length);
+// ── OOXML (.xlsx) Excel Exporter ──────────────────────────────────────────
+// Builds a genuine .xlsx (real ZIP/OOXML) via xlsx-writer.js instead of the
+// old "SpreadsheetML XML saved as .xls" trick, which modern Excel flags as
+// "file format and extension don't match" — and some mail/Office pipelines
+// refuse to open outright, which is what showed up as "corrupted" for a
+// recipient who doesn't click through the warning.
+const REPORT_COL_WIDTHS = [13, 20, 9, 14, 14, 30, 17, 30, 30, 29, 20];
+const REPORT_HEADERS = [
+    'Date', 'Agent name', 'Shift', 'Starting Time', 'End Time',
+    'New Handled Tickets -\nMoved to Open or\nPending',
+    'Updates to\nExisting',
+    'New/Pending/Open\nTickets- Moved to\nCompliance',
+    'New/Pending/Open Tickets -\nMoved to Escalations',
+    'Remarks- for\nspecial cases',
+    'Closed Tickets,\nif any'
+];
+
+function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
+    const { STYLES } = XlsxWriter;
+    const maxContentRows = Math.max(1, openArr.length, newArr.length, complianceArr.length, escalationsArr.length, closedArr.length);
     const totalTemplateRows = Math.max(28, maxContentRows + 1);
 
-    const clean = (val) => {
-        if (val === undefined || val === null) return "";
-        return String(val).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-    };
-
+    // e.g. "#342345 - Where is my money?" — ticket number plus its captured
+    // Payee Issue Type, inline in the same cell right next to the ticket.
     const formatCellWithIssue = (ticketId) => {
         if (!ticketId) return "";
-        const cleanId = String(ticketId).startsWith('#') ? clean(ticketId) : `#${clean(ticketId)}`;
+        const cleanId = String(ticketId).startsWith('#') ? String(ticketId) : `#${ticketId}`;
         if (payeeIssuesMap && payeeIssuesMap[ticketId]) {
-            return `${cleanId}\n(${clean(payeeIssuesMap[ticketId])})`;
+            return `${cleanId} - ${payeeIssuesMap[ticketId]}`;
         }
         return cleanId;
     };
 
-    let xmlStr = `<?xml version="1.0"?><?mso-application progid="Excel.Sheet"?>
-<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40">
-  <Styles>
-    <Style ss:ID="Default">
-      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#000000"/>
-      <Borders>
-        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A6A6"/>
-        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A6A6"/>
-        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A6A6"/>
-        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A0A6A6"/>
-      </Borders>
-    </Style>
-    <Style ss:ID="HeaderStyle">
-      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Borders>
-        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#000000"/>
-        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#000000"/>
-        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#000000"/>
-        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#000000"/>
-      </Borders>
-      <Interior ss:Color="#00B050" ss:Pattern="Solid"/>
-      <Font ss:FontName="Calibri" ss:Size="11" ss:Color="#FFFFFF" ss:Bold="1"/>
-    </Style>
-    <Style ss:ID="DataStyle">
-      <Alignment ss:Horizontal="Center" ss:Vertical="Center" ss:WrapText="1"/>
-      <Borders>
-        <Border ss:Position="Bottom" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6A6A6"/>
-        <Border ss:Position="Left" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6A6A6"/>
-        <Border ss:Position="Right" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6A6A6"/>
-        <Border ss:Position="Top" ss:LineStyle="Continuous" ss:Weight="1" ss:Color="#A6A6A6"/>
-      </Borders>
-      <NumberFormat ss:Format="@"/>
-    </Style>
-  </Styles>
-  <Worksheet ss:Name="Report">
-    <Table>
-      <Column ss:Width="90"/>  <Column ss:Width="140"/> <Column ss:Width="65"/>  <Column ss:Width="95"/>  <Column ss:Width="95"/>  <Column ss:Width="210"/> <Column ss:Width="120"/> <Column ss:Width="210"/> <Column ss:Width="210"/> <Column ss:Width="200"/> <Column ss:Width="140"/> <Row ss:Height="55">
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Date</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Agent name</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Shift</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Starting Time</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">End Time</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">New Handled Tickets -\nMoved to Open or\nPending</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Updates to\nExisting</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">New/Pending/Open\nTickets- Moved to\nCompliance</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">New/Pending/Open Tickets -\nMoved to Escalations</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Remarks- for\nspecial cases</Data></Cell>
-        <Cell ss:StyleID="HeaderStyle"><Data ss:Type="String">Closed Tickets,\nif any</Data></Cell>
-      </Row>`;
+    const headerRow = { height: 55, cells: REPORT_HEADERS.map(v => ({ value: v, style: STYLES.HEADER })) };
 
+    const dataRows = [];
     for (let i = 0; i < totalTemplateRows - 1; i++) {
-        xmlStr += `
-      <Row ss:Height="38">
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? dateStr : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? agentName : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? shift : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? startTime : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? endTime : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${formatCellWithIssue(openArr[i])}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${formatCellWithIssue(updatesArr(i))}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${formatCellWithIssue(complianceArr[i])}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${formatCellWithIssue(escalationsArr[i])}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${clean(i === 0 ? remarks : "")}</Data></Cell>
-        <Cell ss:StyleID="DataStyle"><Data ss:Type="String">${formatCellWithIssue(closedArr[i])}</Data></Cell>
-      </Row>`;
+        dataRows.push({
+            height: 38,
+            cells: [
+                i === 0 ? displayDateStr : '',
+                i === 0 ? agentName : '',
+                i === 0 ? shift : '',
+                i === 0 ? startTime : '',
+                i === 0 ? endTime : '',
+                // "New" button clicks -> new tickets moved to open/pending
+                formatCellWithIssue(newArr[i]),
+                // "Open" button clicks (Team merges in here too) -> updates to an existing ticket
+                formatCellWithIssue(openArr[i]),
+                formatCellWithIssue(complianceArr[i]),
+                formatCellWithIssue(escalationsArr[i]),
+                i === 0 ? remarks : '',
+                formatCellWithIssue(closedArr[i])
+            ].map(v => ({ value: v, style: STYLES.DATA }))
+        });
     }
 
-    function updatesArr(idx) {
-        return (newArr[idx] || teamArr[idx]) ? (newArr[idx] || teamArr[idx]) : "";
-    }
+    const reportSheet = {
+        name: 'Report',
+        cols: REPORT_COL_WIDTHS.map(w => ({ width: w })),
+        rows: [headerRow, ...dataRows]
+    };
 
-    xmlStr += `
-    </Table>
-    <WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
-      <Selected/>
-      <ProtectContents>False</ProtectContents>
-      <DisplayGridLines/>
-    </WorksheetOptions>
-  </Worksheet>
-</Workbook>`;
-
-    const blob = new Blob([xmlStr], { type: 'application/vnd.ms-excel;charset=utf-8;' });
-    const finalExportName = `Support hours day, night and weekend shifts ${filenameMonthName} ${displayDay} ${displayYear}.xls`;
+    const bytes = XlsxWriter.buildWorkbook([reportSheet]);
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const finalExportName = `tickets-${targetDateStr}.xlsx`;
 
     const blobUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
@@ -1484,7 +1596,7 @@ function auditSelectedCalendarDate() {
         </span><br>
         <button class="cal-export-btn" id="btn-export-calendar-day">
           <span class="icon icon-sm" style="color:white;"><svg><use href="#icon-export"/></svg></span>
-          Export Selected Day (.xls)
+          Export Selected Day (.xlsx)
         </button>
       </div>
     `;
@@ -1509,17 +1621,14 @@ function exportSingleDaySpreadsheet(targetDateStr) {
     const dateParts = targetDateStr.split('-');
     const displayCellDate = `${parseInt(dateParts[2])}/${parseInt(dateParts[1])}/${dateParts[0]}`;
 
-    const dummyDateObj = new Date(targetDateStr + "T00:00:00");
-    const labelMonthName = dummyDateObj.toLocaleString('default', { month: 'long' });
-
-    let opArr = [], newArr = [], teamArr = [], compArr = [], escArr = [], clsdArr = [];
+    let opArr = [], newArr = [], compArr = [], escArr = [], clsdArr = [];
 
     const ticketLog = (stats && stats.ticketLog) ? stats.ticketLog : [];
     ticketLog.forEach(t => {
         if (t.date === targetDateStr) {
             if (t.type === 'open') opArr.push(t.ticketNumber);
             if (t.type === 'new') newArr.push(t.ticketNumber);
-            if (t.type === 'team') teamArr.push(t.ticketNumber);
+            if (t.type === 'team') opArr.push(t.ticketNumber); // Team merges into Open — no separate column
             if (t.type === 'compliance') compArr.push(t.ticketNumber);
             if (t.type === 'escalation') escArr.push(t.ticketNumber);
             if (t.type === 'closed') clsdArr.push(t.ticketNumber);
@@ -1535,8 +1644,8 @@ function exportSingleDaySpreadsheet(targetDateStr) {
 
     generateAndDownloadXLSX(
         agentName, shiftType, startTime12, endTime12, remarks,
-        displayCellDate, labelMonthName, parseInt(dateParts[2]), dateParts[0],
-        opArr, newArr, teamArr, compArr, escArr, clsdArr, payeeIssues
+        displayCellDate, targetDateStr,
+        opArr, newArr, compArr, escArr, clsdArr, payeeIssues
     );
 }
 
@@ -1650,6 +1759,116 @@ if ($('backup-import-file')) {
     });
 }
 
+// ── Weekly Cross-User Leaderboard ─────────────────────────────────────────
+function renderWeeklyLeaderboard() {
+    const podium = $('weekly-lb-podium');
+    const weekLabelEl = $('weekly-lb-week-label');
+    const moreBtn = $('weekly-lb-more-btn');
+    const fullList = $('weekly-lb-full');
+    if (!podium) return;
+
+    // Today's day of week — 1 = Monday
+    const today = new Date();
+    const isMonday = today.getDay() === 1;
+
+    // Show loading state
+    podium.innerHTML = '<div class="lb-loading">Loading leaderboard…</div>';
+    if (moreBtn) moreBtn.style.display = 'none';
+    if (fullList) { fullList.innerHTML = ''; fullList.style.display = 'none'; }
+
+    chrome.runtime.sendMessage(
+        { action: 'GET_WEEKLY_LEADERBOARD', isMonday },
+        (response) => {
+            if (chrome.runtime.lastError || !response) {
+                podium.innerHTML = '<div class="lb-empty-msg">Could not load leaderboard.</div>';
+                return;
+            }
+
+            const entries = (response.entries || []).sort((a, b) => b.weekTotal - a.weekTotal);
+
+            // Update week label
+            if (weekLabelEl) {
+                weekLabelEl.textContent = isMonday ? "Last Week's Champion" : 'This Week';
+            }
+
+            if (entries.length === 0) {
+                podium.innerHTML = '<div class="lb-empty-msg">No data yet for this week. Complete a sync to appear here!</div>';
+                return;
+            }
+
+            const top3 = entries.slice(0, 3);
+            const rest = entries.slice(3);
+
+            const rankMeta = [
+                { badge: '👑', color: 'gold' },
+                { badge: '🥈', color: 'silver' },
+                { badge: '🥉', color: 'bronze' }
+            ];
+
+            // ── Render top 3 podium ──
+            podium.innerHTML = '';
+            top3.forEach((user, i) => {
+                const meta = rankMeta[i];
+                const isCrowned = isMonday && i === 0;
+
+                const card = document.createElement('div');
+                card.className = `lb-card lb-rank-${i + 1}${isCrowned ? ' lb-crowned' : ''}`;
+
+                // Avatar: try photo URL, fallback to initial
+                const avatarHtml = user.photoUrl
+                    ? `<img class="lb-avatar" src="${user.photoUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                       <div class="lb-avatar-placeholder" style="display:none">${(user.displayName || user.email || '?')[0].toUpperCase()}</div>`
+                    : `<div class="lb-avatar-placeholder">${(user.displayName || user.email || '?')[0].toUpperCase()}</div>`;
+
+                const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'Unknown');
+                const emailShort = user.email || '';
+
+                card.innerHTML = `
+                    <div class="lb-rank-badge">${meta.badge}</div>
+                    ${avatarHtml}
+                    <div class="lb-name">${displayName}</div>
+                    <div class="lb-email-small">${emailShort}</div>
+                    <div class="lb-score">${user.weekTotal} <span>tickets</span></div>
+                    ${isCrowned ? '<div class="lb-winner-tag">🏆 Last Week\'s Champion</div>' : ''}
+                `;
+                podium.appendChild(card);
+            });
+
+            // ── Render "Show more" for rank 4+ ──
+            if (rest.length > 0 && moreBtn && fullList) {
+                moreBtn.style.display = 'block';
+                moreBtn.textContent = `Show ${rest.length} more ▾`;
+
+                fullList.innerHTML = rest.map((u, i) => {
+                    const name = u.displayName || (u.email ? u.email.split('@')[0] : 'Unknown');
+                    return `
+                        <div class="lb-row">
+                            <span class="lb-row-rank">#${i + 4}</span>
+                            <span class="lb-row-name">${name}</span>
+                            <span class="lb-row-email">${u.email || ''}</span>
+                            <span class="lb-row-score">${u.weekTotal}</span>
+                        </div>
+                    `;
+                }).join('');
+
+                let expanded = false;
+                // Remove any old onclick to avoid stacking handlers
+                const newBtn = moreBtn.cloneNode(true);
+                moreBtn.parentNode.replaceChild(newBtn, moreBtn);
+                newBtn.onclick = () => {
+                    expanded = !expanded;
+                    fullList.style.display = expanded ? 'block' : 'none';
+                    newBtn.textContent = expanded
+                        ? 'Hide ▴'
+                        : `Show ${rest.length} more ▾`;
+                };
+            } else if (moreBtn) {
+                moreBtn.style.display = 'none';
+            }
+        }
+    );
+}
+
 // ── Shift Config Inputs Auto-Save ─────────────────────────────────────────
 ['shift-type-input', 'shift-start-input', 'shift-end-input', 'shift-remarks-input'].forEach(id => {
     const el = $(id);
@@ -1677,4 +1896,5 @@ chrome.storage.local.get(['shiftConfig'], (res) => {
 });
 
 // ── Init ──────────────────────────────────────
+loadFeatureSettings();
 checkAuthAndInit();

@@ -1011,6 +1011,25 @@ body {
     color: var(--accent);
 }
 
+.export-xls-btn {
+    background-color: #217346;
+    border-color: #217346;
+    color: #ffffff;
+}
+
+.export-xls-btn:hover {
+    background-color: #1a5c38;
+    border-color: #1a5c38;
+    color: #ffffff;
+}
+
+/* ── Team feature (hidden until enabled in Settings) ────────────────────── */
+.stat-card.stat-team,
+.col-team,
+.team-legend-item {
+    display: none;
+}
+
 /* ── Toast ───────────────────────────────────────────────────────────────── */
 .toast {
     position: fixed;
@@ -2482,4 +2501,337 @@ body {
     outline: none;
     border-color: var(--accent);
     box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.15);
+}
+
+/* ── Weekly Team Leaderboard ────────────────────────────────────────────────── */
+
+.weekly-lb-week-label {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--text-2);
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.weekly-lb-podium {
+    display: flex;
+    gap: 8px;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.lb-card {
+    flex: 1;
+    min-width: 0;
+    border-radius: 12px;
+    padding: 12px 8px 10px;
+    text-align: center;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    position: relative;
+    overflow: hidden;
+}
+
+.lb-card:hover {
+    transform: translateY(-3px);
+}
+
+.lb-rank-1 {
+    background: linear-gradient(135deg, rgba(184, 134, 11, 0.13), rgba(255, 215, 0, 0.13));
+    border: 1px solid rgba(255, 215, 0, 0.6);
+}
+
+.lb-rank-2 {
+    background: linear-gradient(135deg, rgba(128, 128, 128, 0.13), rgba(192, 192, 192, 0.13));
+    border: 1px solid rgba(192, 192, 192, 0.5);
+}
+
+.lb-rank-3 {
+    background: linear-gradient(135deg, rgba(205, 127, 50, 0.13), rgba(184, 122, 50, 0.13));
+    border: 1px solid rgba(205, 127, 50, 0.5);
+}
+
+/* Crown pulse animation for Monday's champion */
+.lb-crowned {
+    box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.35);
+    animation: crownPulse 2s ease-in-out infinite;
+}
+
+@keyframes crownPulse {
+    0%, 100% { box-shadow: 0 0 18px 4px rgba(255, 215, 0, 0.35); }
+    50%       { box-shadow: 0 0 28px 8px rgba(255, 215, 0, 0.60); }
+}
+
+.lb-rank-badge {
+    font-size: 22px;
+    line-height: 1;
+    margin-bottom: 6px;
+}
+
+.lb-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    display: block;
+    object-fit: cover;
+    border: 2px solid var(--border);
+}
+
+.lb-avatar-placeholder {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin: 0 auto 6px;
+    background: var(--accent);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 16px;
+    color: #fff;
+    border: 2px solid var(--border);
+}
+
+.lb-name {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--text-1);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 2px;
+}
+
+.lb-email-small {
+    font-size: 9px;
+    color: var(--text-2);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 6px;
+}
+
+.lb-score {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    color: var(--green);
+    line-height: 1;
+}
+
+.lb-score span {
+    font-size: 9px;
+    font-weight: 500;
+    color: var(--text-2);
+    display: block;
+    margin-top: 2px;
+}
+
+.lb-winner-tag {
+    font-size: 9px;
+    font-weight: 700;
+    color: #ffd700;
+    margin-top: 6px;
+    letter-spacing: 0.3px;
+}
+
+.lb-loading,
+.lb-empty-msg {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    color: var(--text-2);
+    text-align: center;
+    padding: 16px 0;
+    width: 100%;
+}
+
+/* Show more button */
+.weekly-lb-more-btn {
+    width: 100%;
+    margin-top: 10px;
+    padding: 7px 12px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.weekly-lb-more-btn:hover {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+}
+
+/* Full ranked list (rank 4+) */
+.weekly-lb-full {
+    margin-top: 6px;
+}
+
+.lb-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 4px;
+    border-bottom: 1px solid var(--border);
+    font-family: 'Inter', system-ui, sans-serif;
+}
+
+.lb-row:last-child {
+    border-bottom: none;
+}
+
+.lb-row-rank {
+    font-weight: 700;
+    font-size: 11px;
+    color: var(--text-2);
+    min-width: 26px;
+}
+
+.lb-row-name {
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--text-1);
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lb-row-email {
+    font-size: 9px;
+    color: var(--text-2);
+    flex: 2;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.lb-row-score {
+    font-weight: 700;
+    font-size: 12px;
+    color: var(--green);
+    min-width: 28px;
+    text-align: right;
+}
+
+/* ── First-Sync Name Entry Modal ─────────────────────────────────────────────── */
+
+.name-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.78);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+}
+
+.name-modal-overlay.visible {
+    opacity: 1;
+    pointer-events: all;
+}
+
+.name-modal {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 30px 26px 24px;
+    text-align: center;
+    max-width: 290px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    transform: scale(0.95) translateY(8px);
+    transition: transform 0.25s ease;
+}
+
+.name-modal-overlay.visible .name-modal {
+    transform: scale(1) translateY(0);
+}
+
+.name-modal-logo {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    background: var(--accent);
+    color: #fff;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 18px;
+    font-weight: 800;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 14px;
+}
+
+.name-modal-title {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 15px;
+    font-weight: 800;
+    color: var(--text-1);
+    margin: 0 0 6px;
+}
+
+.name-modal-sub {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 11px;
+    color: var(--text-2);
+    margin: 0 0 16px;
+    line-height: 1.5;
+}
+
+#name-modal-input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-1);
+    border-radius: 8px;
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 13px;
+    font-weight: 500;
+    box-sizing: border-box;
+    margin-bottom: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+#name-modal-input:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(108, 99, 255, 0.18);
+}
+
+.name-modal-save {
+    width: 100%;
+    padding: 10px 16px;
+    font-size: 13px;
+    font-weight: 700;
+    border-radius: 8px;
+    background: var(--accent);
+    color: #fff;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.name-modal-save:hover {
+    background: var(--accent-hover, #5a52e0);
+    transform: translateY(-1px);
+}
+
+.name-modal-save:active {
+    transform: translateY(0);
 }

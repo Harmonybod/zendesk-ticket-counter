@@ -174,6 +174,8 @@ async function pullFromCloud() {
       console.log('[ZTK Cloud] No data found in Firestore for this user — uploading local data');
       // First time: push local data to cloud
       await syncToCloud(localData.dailyTotals, localData.ticketLog, {
+        masterLogHistory: localData.masterLogHistory,
+        ticketPayeeIssues: localData.ticketPayeeIssues,
         agentName: localData.agentName,
         theme: localData.theme,
         countingEnabled: localData.countingEnabled
@@ -181,14 +183,28 @@ async function pullFromCloud() {
       return localData.dailyTotals;
     }
 
-    // Merge: max-per-field strategy for dailyTotals
-    const merged = mergeDailyTotals(localData.dailyTotals, remoteData.dailyTotals);
-
-    // Merge ticketLog: union of all unique entries
+    // Merge ticketLog and masterLogHistory: union of all unique entries —
+    // every ticket detail handled on either device survives the merge.
     const mergedLog = mergeTicketLogs(localData.ticketLog, remoteData.ticketLog);
+    const mergedHistory = mergeMasterLogHistory(localData.masterLogHistory, remoteData.masterLogHistory);
+    const mergedPayeeIssues = mergeTicketPayeeIssues(localData.ticketPayeeIssues, remoteData.ticketPayeeIssues);
+
+    // dailyTotals: recompute from the merged ticketLog wherever it has entries
+    // for a date (the log is the union-merged source of truth, so this is
+    // additive rather than the old max(local, remote) — which silently lost
+    // counts whenever both devices logged different tickets on the same day
+    // before syncing). Fall back to a max-merge for any date with no
+    // ticketLog backing at all (legacy data captured before ticketLog existed).
+    const maxMerged = mergeDailyTotals(localData.dailyTotals, remoteData.dailyTotals);
+    const merged = reconcileDailyTotalsWithLog(maxMerged, mergedLog);
 
     // Save merged data locally
-    const updates = { dailyTotals: merged, ticketLog: mergedLog };
+    const updates = {
+      dailyTotals: merged,
+      ticketLog: mergedLog,
+      masterLogHistory: mergedHistory,
+      ticketPayeeIssues: mergedPayeeIssues
+    };
     if (remoteData.agentName && !localData.agentName) {
       updates.agentName = remoteData.agentName;
     }
@@ -196,9 +212,16 @@ async function pullFromCloud() {
     lastCloudSyncTime = Date.now();
 
     // If we changed anything, push merged result back
-    if (dailyTotalsChanged(merged, remoteData.dailyTotals)) {
+    const changed = dailyTotalsChanged(merged, remoteData.dailyTotals)
+      || mergedLog.length !== (remoteData.ticketLog || []).length
+      || mergedHistory.length !== (remoteData.masterLogHistory || []).length
+      || Object.keys(mergedPayeeIssues).length !== Object.keys(remoteData.ticketPayeeIssues || {}).length;
+
+    if (changed) {
       console.log('[ZTK Cloud] Local had data not in cloud, pushing merged result back');
       await syncToCloud(merged, mergedLog, {
+        masterLogHistory: mergedHistory,
+        ticketPayeeIssues: mergedPayeeIssues,
         agentName: updates.agentName || localData.agentName,
         theme: localData.theme,
         countingEnabled: localData.countingEnabled
@@ -245,6 +268,26 @@ function mergeDailyTotals(local, remote) {
   return merged;
 }
 
+// For every date that has ticketLog entries, replace the max-merged total
+// with an aggregate recomputed straight from the (already union-merged,
+// deduped) ticketLog. That log is additive and lossless, so this is what
+// makes "worked 3 tickets on phone A + 2 on phone B, same day" correctly
+// total 5 instead of max(3, 2) = 3. Dates with no ticketLog entries at all
+// (older data captured before ticketLog existed) keep their max-merged value.
+function reconcileDailyTotalsWithLog(dailyTotals, ticketLog) {
+  const recomputed = {};
+  for (const entry of ticketLog) {
+    if (!recomputed[entry.date]) recomputed[entry.date] = emptyTotals();
+    recomputed[entry.date][entry.type] = (recomputed[entry.date][entry.type] ?? 0) + 1;
+  }
+
+  const result = { ...dailyTotals };
+  for (const [day, totals] of Object.entries(recomputed)) {
+    result[day] = totals;
+  }
+  return result;
+}
+
 function dailyTotalsChanged(a, b) {
   const aKeys = Object.keys(a);
   const bKeys = Object.keys(b);
@@ -261,15 +304,24 @@ function dailyTotalsChanged(a, b) {
 
 // ── Write-through: save to local + cloud ──────
 
+// Fields that Firestore actually stores (see toFirestoreDoc) — a save that
+// touches any one of these should push to the cloud, not just dailyTotals.
+// Previously masterLogHistory/ticketPayeeIssues-only saves (payee issue
+// capture, ticket-handled logging) never triggered a push on their own —
+// they only rode along the next time some other action happened to also
+// save dailyTotals, so a payee issue captured right before someone closed
+// their laptop could sit unsynced indefinitely.
+const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'theme', 'countingEnabled'];
+
 async function saveAll(data) {
   // Always save to local first — this must never fail
   await saveLocal(data);
 
   // Also push to cloud (skip the events array — too large, local-only)
-  if (data.dailyTotals !== undefined) {
+  if (CLOUD_RELEVANT_KEYS.some(k => data[k] !== undefined)) {
     try {
       const localData = await getLocal();
-      await syncToCloud(data.dailyTotals, data.ticketLog ?? localData.ticketLog, {
+      await syncToCloud(data.dailyTotals ?? localData.dailyTotals, data.ticketLog ?? localData.ticketLog, {
         masterLogHistory: data.masterLogHistory ?? localData.masterLogHistory,
         ticketPayeeIssues: data.ticketPayeeIssues ?? localData.ticketPayeeIssues,
         agentName: data.agentName ?? localData.agentName,
@@ -282,46 +334,122 @@ async function saveAll(data) {
   }
 }
 
+// ── Serialized Storage Writer ─────────────────────────────────────────────
+// chrome.storage.local has no atomic read-modify-write. Every Zendesk tab
+// runs its own content.js instance (each with its own 1s refresh timer), so
+// two tabs — or a click handler racing the periodic refresh — can both read
+// the same stale snapshot of events/dailyTotals/ticketLog/masterLogHistory/
+// ticketPayeeIssues, then write back their own version a few ms apart,
+// with the later write silently clobbering whatever the earlier one added.
+// This is exactly what was quietly dropping captured Payee Issue Type data
+// before export. Routing every read-modify-write through this single
+// promise queue — which lives in the one shared service worker context for
+// every tab — makes each mutation atomic relative to all the others.
+let storageWriteQueue = Promise.resolve();
+function queueStorageWrite(fn) {
+  storageWriteQueue = storageWriteQueue.catch(() => {}).then(fn);
+  return storageWriteQueue;
+}
+
 // ── Add Event ─────────────────────────────────
 
 async function addEvent(type, ticketNumber) {
-  const ts = Date.now();
-  const key = dateKey(ts);
-  const data = await getAll();
+  return queueStorageWrite(async () => {
+    const ts = Date.now();
+    const key = dateKey(ts);
+    const data = await getAll();
 
-  // Append event
-  data.events.push({ type, timestamp: ts, ticketNumber: ticketNumber || null });
+    // Append event
+    data.events.push({ type, timestamp: ts, ticketNumber: ticketNumber || null });
 
-  // Increment daily total
-  if (!data.dailyTotals[key]) {
-    data.dailyTotals[key] = { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 };
-  }
-  data.dailyTotals[key][type] = (data.dailyTotals[key][type] ?? 0) + 1;
+    // Increment daily total
+    if (!data.dailyTotals[key]) {
+      data.dailyTotals[key] = { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 };
+    }
+    data.dailyTotals[key][type] = (data.dailyTotals[key][type] ?? 0) + 1;
 
-  // Append to ticket log if we have a ticket number
-  if (ticketNumber) {
-    data.ticketLog.push({ date: key, type, ticketNumber, timestamp: ts });
-  }
+    // Append to ticket log if we have a ticket number
+    if (ticketNumber) {
+      data.ticketLog.push({ date: key, type, ticketNumber, timestamp: ts });
+    }
 
-  await saveAll({ events: data.events, dailyTotals: data.dailyTotals, ticketLog: data.ticketLog });
-  return { success: true, totals: data.dailyTotals[key] };
+    await saveAll({ events: data.events, dailyTotals: data.dailyTotals, ticketLog: data.ticketLog });
+    return { success: true, totals: data.dailyTotals[key] };
+  });
 }
 
 // ── Undo Last Event ───────────────────────────
 
 async function undoLastEvent() {
-  const data = await getAll();
-  if (!data.events.length) return { success: false, message: 'No events to undo.' };
+  return queueStorageWrite(async () => {
+    const data = await getAll();
+    if (!data.events.length) return { success: false, message: 'No events to undo.' };
 
-  const last = data.events.pop();
-  const key = dateKey(last.timestamp);
+    const last = data.events.pop();
+    const key = dateKey(last.timestamp);
 
-  if (data.dailyTotals[key] && data.dailyTotals[key][last.type] > 0) {
-    data.dailyTotals[key][last.type] -= 1;
-  }
+    if (data.dailyTotals[key] && data.dailyTotals[key][last.type] > 0) {
+      data.dailyTotals[key][last.type] -= 1;
+    }
 
-  await saveAll({ events: data.events, dailyTotals: data.dailyTotals });
-  return { success: true, undoneType: last.type };
+    // Also remove the matching ticketLog entry — previously this was left
+    // behind, so an "undone" ticket still showed up in CSV/XLSX exports,
+    // and a cloud sync could resurrect the undone count in dailyTotals since
+    // that's now recomputed from ticketLog on merge (see reconcileDailyTotalsWithLog).
+    if (last.ticketNumber) {
+      for (let i = data.ticketLog.length - 1; i >= 0; i--) {
+        const entry = data.ticketLog[i];
+        if (entry.ticketNumber === last.ticketNumber && entry.type === last.type && entry.timestamp === last.timestamp) {
+          data.ticketLog.splice(i, 1);
+          break;
+        }
+      }
+    }
+
+    await saveAll({ events: data.events, dailyTotals: data.dailyTotals, ticketLog: data.ticketLog });
+    return { success: true, undoneType: last.type };
+  });
+}
+
+// ── Record Payee Issue (live-scraped, periodic) ───────────────────────────
+
+async function recordPayeeIssue(ticketId, issueVal) {
+  if (!ticketId || !issueVal || issueVal === '-') return { success: true };
+  return queueStorageWrite(async () => {
+    const data = await getAll();
+    const mapping = data.ticketPayeeIssues || {};
+    if (mapping[ticketId] !== issueVal) {
+      mapping[ticketId] = issueVal;
+      // saveAll (not saveLocal) so this pushes to the cloud right away —
+      // otherwise it only synced whenever some other action next happened
+      // to also save dailyTotals.
+      await saveAll({ ticketPayeeIssues: mapping });
+    }
+    return { success: true };
+  });
+}
+
+// ── Record Ticket Handled (masterLogHistory + payee issue, on click) ─────
+
+async function recordTicketHandled(ticketId, category, issueVal) {
+  return queueStorageWrite(async () => {
+    const data = await getAll();
+    const masterLogHistory = data.masterLogHistory || [];
+    const ticketPayeeIssues = data.ticketPayeeIssues || {};
+
+    masterLogHistory.push({
+      ticketId,
+      category,
+      timestamp: new Date().toISOString()
+    });
+
+    if (issueVal && issueVal !== '-') {
+      ticketPayeeIssues[ticketId] = issueVal;
+    }
+
+    await saveAll({ masterLogHistory, ticketPayeeIssues });
+    return { success: true };
+  });
 }
 
 // ── Aggregation ───────────────────────────────
@@ -831,14 +959,44 @@ async function sendTelegramNote(text) {
 
 // ── Auth Handlers ─────────────────────────────
 
+// signOut() only clears the cached Google/Firebase token — it never touches
+// dailyTotals/ticketLog/masterLogHistory/ticketPayeeIssues/agentName, so a
+// second person signing in on the SAME device would otherwise have their
+// pullFromCloud() merge the FIRST person's still-present local tickets into
+// their own account, then push that contaminated result to their own
+// Firestore document — permanently mixing one user's tickets into another's.
+// Tracking which uid was last active on this device lets us detect an
+// account switch and wipe local data first, so pullFromCloud starts from a
+// clean slate and only ever restores the newly signed-in user's own cloud data.
+const LAST_UID_KEY = 'lastSignedInUid';
+
 async function handleSignIn() {
   try {
     const googleToken = await getGoogleAuthToken(true);
     const session = await exchangeForFirebaseIdToken(googleToken);
 
-    // Cache session
+    const prior = await new Promise((resolve) => {
+      chrome.storage.local.get([LAST_UID_KEY], (res) => resolve(res[LAST_UID_KEY] || null));
+    });
+
+    if (prior && prior !== session.uid) {
+      console.log('[ZTK Auth] Different Google account signed in on this device — clearing local ticket data before pulling this account\'s cloud data');
+      await saveLocal({
+        events: [],
+        dailyTotals: {},
+        ticketLog: [],
+        masterLogHistory: [],
+        ticketPayeeIssues: {},
+        agentName: '',
+        tgToken: '',
+        tgChatId: '',
+        shiftConfig: null
+      });
+    }
+
+    // Cache session + remember which account is now active on this device
     await new Promise((resolve) => {
-      chrome.storage.local.set({ [AUTH_SESSION_KEY]: session }, resolve);
+      chrome.storage.local.set({ [AUTH_SESSION_KEY]: session, [LAST_UID_KEY]: session.uid }, resolve);
     });
 
     // Immediately pull from cloud after sign-in
@@ -897,6 +1055,12 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case 'UNDO':
           sendResponse(await undoLastEvent());
+          break;
+        case 'RECORD_PAYEE_ISSUE':
+          sendResponse(await recordPayeeIssue(msg.ticketId, msg.issueVal));
+          break;
+        case 'RECORD_TICKET_HANDLED':
+          sendResponse(await recordTicketHandled(msg.ticketId, msg.category, msg.issueVal));
           break;
         case 'GET_STATS':
           sendResponse(await getStats());

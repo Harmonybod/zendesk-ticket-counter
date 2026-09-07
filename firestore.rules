@@ -1,0 +1,55 @@
+// ─────────────────────────────────────────────
+// Zendesk Ticket Tracker — Firestore Security Rules
+//
+// This is NOT auto-deployed by anything in this repo — the extension talks
+// to Firestore over the plain REST API (see firebase-config.js), which has
+// no concept of "rules" on its own. Rules are enforced entirely on Google's
+// side, tied to the Firestore project (`zendesk-tracker`), and only take
+// effect once you publish them.
+//
+// Without this (or something equivalent) actually published in the Firebase
+// Console, nothing in the extension's code stops one signed-in user from
+// reading or overwriting another user's ticket data — the REST calls just
+// take `uid` as a plain URL path segment with no server-side check that the
+// caller's token actually belongs to that uid. That check is exactly what
+// these rules add.
+//
+// ── How to deploy ────────────────────────────────────────────────────────
+// Easiest path (no CLI needed):
+//   1. https://console.firebase.google.com/ → project "zendesk-tracker"
+//   2. Firestore Database → Rules tab
+//   3. Paste everything below this comment block, replacing what's there
+//   4. Click "Publish"
+//
+// Or with the Firebase CLI, from a folder containing this file:
+//   firebase deploy --only firestore:rules --project zendesk-tracker
+// ─────────────────────────────────────────────
+
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Per-user ticket data — /users/{uid}/data/tracker
+    // Only the signed-in owner of `uid` may read or write their own document.
+    // request.auth.uid comes from the verified Firebase ID token sent as the
+    // Authorization: Bearer header on every firestoreRead/firestoreWrite call.
+    match /users/{uid}/data/{document=**} {
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Weekly cross-user leaderboard — /weeklyLeaderboard/{weekKey}/users/{uid}
+    // Any signed-in user can read the whole leaderboard (that's the point of
+    // it), but an entry can only ever be written by the uid it belongs to —
+    // otherwise any signed-in user could overwrite someone else's score.
+    match /weeklyLeaderboard/{weekKey}/users/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Deny everything else by default.
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

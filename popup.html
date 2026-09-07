@@ -96,35 +96,6 @@
 
         <div class="settings-divider"></div>
 
-        <!-- Shift Setup & Configuration -->
-        <div class="settings-row" id="shift-setup-settings">
-          <span class="settings-label">⏱ Shift Configuration</span>
-          <div class="shift-settings-grid">
-            <div>
-              <label for="shift-start-input">Start Time</label>
-              <input type="time" id="shift-start-input" />
-            </div>
-            <div>
-              <label for="shift-end-input">End Time</label>
-              <input type="time" id="shift-end-input" />
-            </div>
-            <div>
-              <label for="shift-type-input">Shift Type</label>
-              <select id="shift-type-input">
-                <option value="Day">Day Shift</option>
-                <option value="Night">Night Shift</option>
-                <option value="Weekend">Weekend Shift</option>
-              </select>
-            </div>
-            <div class="remarks-row">
-              <label for="shift-remarks-input">Remarks</label>
-              <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
-            </div>
-          </div>
-        </div>
-
-        <div class="settings-divider"></div>
-
         <!-- Display Name -->
         <div class="settings-row">
           <label class="settings-label" for="agent-name-input">Display Name</label>
@@ -145,6 +116,59 @@
           <button class="toggle-switch" id="counting-toggle" role="switch" aria-checked="true">
             <span class="toggle-thumb"></span>
           </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Tap Mode -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Tap Mode</span>
+            <span class="settings-sublabel">Single tap or double tap to count tickets</span>
+          </div>
+          <button class="toggle-switch" id="tap-mode-toggle" role="switch" aria-checked="false">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Button Shape -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Button Shape</span>
+            <span class="settings-sublabel">Rectangle with labels (default) or compact circles</span>
+          </div>
+          <button class="toggle-switch" id="button-shape-toggle" role="switch" aria-checked="false">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Team Button -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Team Button</span>
+            <span class="settings-sublabel">Adds a Team button to the floater. Team tickets are counted with Open tickets in CSV/XLS exports (no separate column).</span>
+          </div>
+          <button class="toggle-switch" id="team-button-toggle" role="switch" aria-checked="false">
+            <span class="toggle-thumb"></span>
+          </button>
+        </div>
+
+        <div class="settings-divider"></div>
+
+        <!-- Accent Color -->
+        <div class="settings-row settings-row-inline">
+          <div class="settings-label-group">
+            <span class="settings-label">Accent Color</span>
+            <span class="settings-sublabel">Theme color for the dashboard &amp; floater buttons</span>
+          </div>
+          <div class="settings-name-row" style="gap:6px;">
+            <input type="color" id="accent-color-input" value="#6c63ff" style="width:36px; height:28px; padding:2px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); cursor:pointer;" />
+            <button class="btn-save" id="accent-color-reset" title="Reset to default colors">Reset</button>
+          </div>
         </div>
 
         <div class="settings-divider"></div>
@@ -197,7 +221,7 @@
         <div class="stat-value" id="stat-new">0</div>
         <div class="stat-label">New</div>
       </div>
-      <div class="stat-card stat-team">
+      <div class="stat-card stat-team" style="display:none;">
         <div class="stat-dot blue-dot"></div>
         <div class="stat-value" id="stat-team">0</div>
         <div class="stat-label">Team</div>
@@ -234,7 +258,7 @@
         <div class="chart-legend">
           <span class="legend-dot red-dot"></span> Open
           <span class="legend-dot yellow-dot"></span> New
-          <span class="legend-dot blue-dot"></span> Team
+          <span class="team-legend-item"><span class="legend-dot blue-dot"></span> Team</span>
           <span class="legend-dot green-dot"></span> Cmpl
           <span class="legend-dot brown-dot"></span> Esc
           <span class="legend-dot gray-dot"></span> Close
@@ -269,6 +293,41 @@
       <div class="alltime-sub" id="alltime-sub">Open: 0 · New: 0 · Team: 0 · Cmpl: 0 · Esc: 0 · Closed: 0</div>
     </section>
 
+    <!-- ── Shift Configuration ── -->
+    <div class="section-header-bar">
+      <h3 class="section-header-title">
+        <span class="icon icon-warning"><svg><use href="#icon-clock"/></svg></span>
+        Shift Configuration
+      </h3>
+    </div>
+    <section class="section-box" id="shift-setup-settings" style="margin: 0 14px 12px;">
+      <div class="shift-settings-grid">
+        <div>
+          <label for="shift-start-input">Start Time</label>
+          <input type="time" id="shift-start-input" />
+        </div>
+        <div>
+          <label for="shift-end-input">End Time</label>
+          <input type="time" id="shift-end-input" />
+        </div>
+        <div>
+          <label for="shift-type-input">Shift Type</label>
+          <select id="shift-type-input">
+            <option value="Day">Day Shift</option>
+            <option value="Night">Night Shift</option>
+            <option value="Weekend">Weekend Shift</option>
+          </select>
+        </div>
+        <div class="remarks-row">
+          <label for="shift-remarks-input">Remarks</label>
+          <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
+        </div>
+      </div>
+      <button class="footer-btn export-btn" id="shift-download-csv" style="margin-top:12px; width:100%; justify-content:center;">
+        <span class="footer-icon">⬇</span> Download CSV
+      </button>
+    </section>
+
     <!-- ── Last Handled Ticket ── -->
     <section class="last-ticket-section" id="last-ticket-section">
       <div class="last-ticket-label">Last Handled</div>
@@ -301,7 +360,7 @@
         <div class="detail-legend" id="detail-legend">
           <span class="legend-dot red-dot"></span> Open
           <span class="legend-dot yellow-dot"></span> New
-          <span class="legend-dot blue-dot"></span> Team
+          <span class="team-legend-item"><span class="legend-dot blue-dot"></span> Team</span>
           <span class="legend-dot green-dot"></span> Cmpl
           <span class="legend-dot brown-dot"></span> Esc
           <span class="legend-dot gray-dot"></span> Close
@@ -323,6 +382,9 @@
         </button>
         <button class="footer-btn export-btn" id="export-json">
           <span class="footer-icon">⬇</span> JSON
+        </button>
+        <button class="footer-btn export-btn export-xls-btn" id="export-xls">
+          <span class="footer-icon">⬇</span> XLSX
         </button>
       </div>
     </footer>
@@ -419,7 +481,7 @@
             <th>Timeframe</th>
             <th>Open</th>
             <th>New</th>
-            <th>Team</th>
+            <th class="col-team">Team</th>
             <th>Cmpl</th>
             <th>Esc</th>
             <th>Clsd</th>
@@ -429,43 +491,43 @@
         <tbody>
           <tr class="clickable-row active-selected-row" id="row-today" data-period="today">
             <td><strong>Today <span class="live-dot"></span></strong></td>
-            <td id="pa-t-open">0</td><td id="pa-t-new">0</td><td id="pa-t-team">0</td>
+            <td id="pa-t-open">0</td><td id="pa-t-new">0</td><td class="col-team" id="pa-t-team">0</td>
             <td id="pa-t-cmpl">0</td><td id="pa-t-esc">0</td><td id="pa-t-clsd">0</td>
             <td id="pa-t-total" style="font-weight:700; color: var(--green);">0</td>
           </tr>
           <tr class="clickable-row" id="row-last7" data-period="last7">
             <td><strong>Last 7 Days</strong></td>
-            <td id="pa-7-open">0</td><td id="pa-7-new">0</td><td id="pa-7-team">0</td>
+            <td id="pa-7-open">0</td><td id="pa-7-new">0</td><td class="col-team" id="pa-7-team">0</td>
             <td id="pa-7-cmpl">0</td><td id="pa-7-esc">0</td><td id="pa-7-clsd">0</td>
             <td id="pa-7-total" style="font-weight:700;">0</td>
           </tr>
           <tr class="clickable-row" id="row-last15" data-period="last15">
             <td><strong>Last 15 Days</strong></td>
-            <td id="pa-15-open">0</td><td id="pa-15-new">0</td><td id="pa-15-team">0</td>
+            <td id="pa-15-open">0</td><td id="pa-15-new">0</td><td class="col-team" id="pa-15-team">0</td>
             <td id="pa-15-cmpl">0</td><td id="pa-15-esc">0</td><td id="pa-15-clsd">0</td>
             <td id="pa-15-total" style="font-weight:700;">0</td>
           </tr>
           <tr class="clickable-row" id="row-last30" data-period="last30">
             <td><strong>Last 30 Days</strong></td>
-            <td id="pa-30-open">0</td><td id="pa-30-new">0</td><td id="pa-30-team">0</td>
+            <td id="pa-30-open">0</td><td id="pa-30-new">0</td><td class="col-team" id="pa-30-team">0</td>
             <td id="pa-30-cmpl">0</td><td id="pa-30-esc">0</td><td id="pa-30-clsd">0</td>
             <td id="pa-30-total" style="font-weight:700;">0</td>
           </tr>
           <tr class="clickable-row" id="row-last3m" data-period="last3m">
             <td><strong>Last 3 Months</strong></td>
-            <td id="pa-3m-open">0</td><td id="pa-3m-new">0</td><td id="pa-3m-team">0</td>
+            <td id="pa-3m-open">0</td><td id="pa-3m-new">0</td><td class="col-team" id="pa-3m-team">0</td>
             <td id="pa-3m-cmpl">0</td><td id="pa-3m-esc">0</td><td id="pa-3m-clsd">0</td>
             <td id="pa-3m-total" style="font-weight:700;">0</td>
           </tr>
           <tr class="clickable-row" id="row-last6m" data-period="last6m">
             <td><strong>Last 6 Months</strong></td>
-            <td id="pa-6m-open">0</td><td id="pa-6m-new">0</td><td id="pa-6m-team">0</td>
+            <td id="pa-6m-open">0</td><td id="pa-6m-new">0</td><td class="col-team" id="pa-6m-team">0</td>
             <td id="pa-6m-cmpl">0</td><td id="pa-6m-esc">0</td><td id="pa-6m-clsd">0</td>
             <td id="pa-6m-total" style="font-weight:700;">0</td>
           </tr>
           <tr class="clickable-row" id="row-last1y" data-period="last1y">
             <td><strong>Last 1 Year</strong></td>
-            <td id="pa-1y-open">0</td><td id="pa-1y-new">0</td><td id="pa-1y-team">0</td>
+            <td id="pa-1y-open">0</td><td id="pa-1y-new">0</td><td class="col-team" id="pa-1y-team">0</td>
             <td id="pa-1y-cmpl">0</td><td id="pa-1y-esc">0</td><td id="pa-1y-clsd">0</td>
             <td id="pa-1y-total" style="font-weight:700;">0</td>
           </tr>
@@ -492,7 +554,7 @@
         <div class="ratio-legend">
           <span><span class="icon icon-sm" style="color: var(--red);"><svg><use href="#icon-check"/></svg></span> Open</span>
           <span><span class="icon icon-sm" style="color: var(--yellow);"><svg><use href="#icon-check"/></svg></span> New</span>
-          <span><span class="icon icon-sm" style="color: var(--blue);"><svg><use href="#icon-check"/></svg></span> Team</span>
+          <span class="team-legend-item"><span class="icon icon-sm" style="color: var(--blue);"><svg><use href="#icon-check"/></svg></span> Team</span>
           <span><span class="icon icon-sm" style="color: var(--green);"><svg><use href="#icon-check"/></svg></span> Cmpl</span>
           <span><span class="icon icon-sm" style="color: var(--brown);"><svg><use href="#icon-check"/></svg></span> Esc</span>
           <span><span class="icon icon-sm" style="color: var(--gray);"><svg><use href="#icon-check"/></svg></span> Clsd</span>
@@ -588,6 +650,7 @@
   <div class="toast" id="toast"></div>
 
   <script src="chart.min.js"></script>
+  <script src="xlsx-writer.js"></script>
   <script src="popup.js"></script>
 </body>
 
