@@ -5,84 +5,201 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap');
 
 /* ── Theme Variables ─────────────────────────────────────────────────────── */
+/* 5 named themes, picked from the Appearance modal (see #theme-picker-modal).
+   "moody" is the default/fallback — the bare :root rule doubles as its values
+   so an unrecognized/missing data-theme attribute still renders correctly. */
 :root,
-:root[data-theme="dark"] {
-    --bg-0: #0d0f1c;
-    --bg-1: #131628;
-    --bg-2: #1a1d35;
-    --bg-card: #1e2240;
-    --bg-card-h: #242848;
-    --border: rgba(255, 255, 255, 0.07);
-    --border-h: rgba(255, 255, 255, 0.13);
-    --text-1: #ffffff;
-    --text-2: rgba(255, 255, 255, 0.55);
-    --text-3: rgba(255, 255, 255, 0.3);
-    --accent: #6c63ff;
-    --accent-dim: rgba(108, 99, 255, 0.18);
+:root[data-theme="moody"] {
+    --bg-0: #0e0e10;
+    --bg-1: #171717;
+    --bg-2: #202123;
+    --bg-card: #202123;
+    --bg-card-h: #2a2b2e;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-h: rgba(255, 255, 255, 0.14);
+    --text-1: #ececec;
+    --text-2: rgba(236, 236, 236, 0.6);
+    --text-3: rgba(236, 236, 236, 0.32);
+    --accent: #10a37f;
+    --accent-dim: rgba(16, 163, 127, 0.18);
     --red: #ff6b6b;
     --red-glow: rgba(255, 107, 107, 0.2);
     --yellow: #ffd93d;
     --yellow-glow: rgba(255, 217, 61, 0.2);
-    --blue: #74b9ff;
-    --blue-glow: rgba(116, 185, 255, 0.2);
-    --green: #2ecc71;
-    --green-glow: rgba(46, 204, 113, 0.2);
+    --blue: #59a8ff;
+    --blue-glow: rgba(89, 168, 255, 0.2);
+    --green: #22c58b;
+    --green-glow: rgba(34, 197, 139, 0.2);
     --brown: #b5723e;
     --brown-glow: rgba(181, 114, 62, 0.2);
-    --gray: #95a5a6;
-    --gray-glow: rgba(149, 165, 166, 0.2);
+    --gray: #9a9a9a;
+    --gray-glow: rgba(154, 154, 154, 0.2);
     --radius-sm: 8px;
     --radius-md: 12px;
     --radius-lg: 16px;
-    --header-grad: linear-gradient(135deg, #131628 0%, #1a1d35 100%);
-    --chart-tooltip-bg: rgba(13, 15, 28, 0.95);
-    --chart-grid: rgba(255, 255, 255, 0.04);
-    --chart-grid-y: rgba(255, 255, 255, 0.06);
+    --header-grad: linear-gradient(135deg, #171717 0%, #202123 100%);
+    --chart-tooltip-bg: rgba(14, 14, 16, 0.95);
+    --chart-grid: rgba(255, 255, 255, 0.05);
+    --chart-grid-y: rgba(255, 255, 255, 0.07);
     --chart-ticks: rgba(255, 255, 255, 0.4);
-    --btn-active-bg: linear-gradient(135deg, rgba(108, 99, 255, 0.25), rgba(62, 207, 207, 0.15));
-    --btn-active-border: rgba(108, 99, 255, 0.5);
-    --cal-hover: rgba(255, 255, 255, 0.1);
+    --btn-active-bg: linear-gradient(135deg, rgba(16, 163, 127, 0.25), rgba(16, 163, 127, 0.1));
+    --btn-active-border: rgba(16, 163, 127, 0.5);
+    --cal-hover: rgba(255, 255, 255, 0.08);
     --cal-dim: rgba(255, 255, 255, 0.2);
-    --cal-sel: #6c63ff;
-    --week-hover: rgba(108, 99, 255, 0.15);
+    --cal-sel: #10a37f;
+    --week-hover: rgba(16, 163, 127, 0.15);
 }
 
-:root[data-theme="light"] {
-    --bg-0: #f4f5f9;
+:root[data-theme="minimalist"] {
+    --bg-0: #fafafa;
     --bg-1: #ffffff;
-    --bg-2: #f0f2f7;
+    --bg-2: #f4f4f5;
     --bg-card: #ffffff;
-    --bg-card-h: #f9f9fc;
-    --border: rgba(0, 0, 0, 0.08);
-    --border-h: rgba(0, 0, 0, 0.15);
-    --text-1: #1a1d35;
-    --text-2: #5b627a;
-    --text-3: #9ea4b5;
-    --accent: #554dfa;
-    --accent-dim: rgba(85, 77, 250, 0.1);
-    --red: #f25555;
-    --red-glow: rgba(242, 85, 85, 0.2);
-    --yellow: #f2c722;
-    --yellow-glow: rgba(242, 199, 34, 0.2);
-    --blue: #55a8f2;
-    --blue-glow: rgba(85, 168, 242, 0.2);
-    --green: #27ae60;
-    --green-glow: rgba(39, 174, 96, 0.2);
-    --brown: #8B5E3C;
-    --brown-glow: rgba(139, 94, 60, 0.2);
-    --gray: #7f8c8d;
-    --gray-glow: rgba(127, 140, 141, 0.2);
-    --header-grad: linear-gradient(135deg, #ffffff 0%, #f4f5f9 100%);
-    --chart-tooltip-bg: rgba(26, 29, 53, 0.95);
+    --bg-card-h: #f9f9fa;
+    --border: rgba(0, 0, 0, 0.06);
+    --border-h: rgba(0, 0, 0, 0.12);
+    --text-1: #18181b;
+    --text-2: #6b7280;
+    --text-3: #a1a1aa;
+    --accent: #3f3f46;
+    --accent-dim: rgba(63, 63, 70, 0.08);
+    --red: #e0575b;
+    --red-glow: rgba(224, 87, 91, 0.15);
+    --yellow: #d9a441;
+    --yellow-glow: rgba(217, 164, 65, 0.15);
+    --blue: #4b7bab;
+    --blue-glow: rgba(75, 123, 171, 0.15);
+    --green: #4c8c68;
+    --green-glow: rgba(76, 140, 104, 0.15);
+    --brown: #8b6f56;
+    --brown-glow: rgba(139, 111, 86, 0.15);
+    --gray: #8c8c94;
+    --gray-glow: rgba(140, 140, 148, 0.15);
+    --header-grad: linear-gradient(135deg, #ffffff 0%, #fafafa 100%);
+    --chart-tooltip-bg: rgba(24, 24, 27, 0.92);
     --chart-grid: rgba(0, 0, 0, 0.04);
     --chart-grid-y: rgba(0, 0, 0, 0.06);
-    --chart-ticks: rgba(0, 0, 0, 0.4);
-    --btn-active-bg: linear-gradient(135deg, rgba(85, 77, 250, 0.1), rgba(62, 207, 207, 0.1));
-    --btn-active-border: rgba(85, 77, 250, 0.3);
+    --chart-ticks: rgba(0, 0, 0, 0.35);
+    --btn-active-bg: linear-gradient(135deg, rgba(63, 63, 70, 0.08), rgba(63, 63, 70, 0.04));
+    --btn-active-border: rgba(63, 63, 70, 0.3);
     --cal-hover: rgba(0, 0, 0, 0.04);
     --cal-dim: rgba(0, 0, 0, 0.2);
-    --cal-sel: #554dfa;
-    --week-hover: rgba(85, 77, 250, 0.08);
+    --cal-sel: #3f3f46;
+    --week-hover: rgba(63, 63, 70, 0.08);
+}
+
+:root[data-theme="vibrant"] {
+    --bg-0: #150f28;
+    --bg-1: #1e1638;
+    --bg-2: #271c47;
+    --bg-card: #291f4d;
+    --bg-card-h: #33265e;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-h: rgba(255, 255, 255, 0.18);
+    --text-1: #ffffff;
+    --text-2: rgba(255, 255, 255, 0.65);
+    --text-3: rgba(255, 255, 255, 0.35);
+    --accent: #ff2e88;
+    --accent-dim: rgba(255, 46, 136, 0.2);
+    --red: #ff4d6d;
+    --red-glow: rgba(255, 77, 109, 0.25);
+    --yellow: #ffd23f;
+    --yellow-glow: rgba(255, 210, 63, 0.25);
+    --blue: #3fa9ff;
+    --blue-glow: rgba(63, 169, 255, 0.25);
+    --green: #2be399;
+    --green-glow: rgba(43, 227, 153, 0.25);
+    --brown: #ff9f45;
+    --brown-glow: rgba(255, 159, 69, 0.25);
+    --gray: #b39ddb;
+    --gray-glow: rgba(179, 157, 219, 0.25);
+    --header-grad: linear-gradient(135deg, #1e1638 0%, #291f4d 100%);
+    --chart-tooltip-bg: rgba(21, 15, 40, 0.95);
+    --chart-grid: rgba(255, 255, 255, 0.06);
+    --chart-grid-y: rgba(255, 255, 255, 0.08);
+    --chart-ticks: rgba(255, 255, 255, 0.45);
+    --btn-active-bg: linear-gradient(135deg, rgba(255, 46, 136, 0.3), rgba(63, 169, 255, 0.15));
+    --btn-active-border: rgba(255, 46, 136, 0.55);
+    --cal-hover: rgba(255, 255, 255, 0.1);
+    --cal-dim: rgba(255, 255, 255, 0.25);
+    --cal-sel: #ff2e88;
+    --week-hover: rgba(255, 46, 136, 0.18);
+}
+
+:root[data-theme="organic"] {
+    --bg-0: #f3f1e7;
+    --bg-1: #faf9f2;
+    --bg-2: #ece7d8;
+    --bg-card: #faf9f2;
+    --bg-card-h: #f1eee2;
+    --border: rgba(59, 79, 49, 0.12);
+    --border-h: rgba(59, 79, 49, 0.2);
+    --text-1: #2f3a25;
+    --text-2: #5c6b4c;
+    --text-3: #8b9a7a;
+    --accent: #4c7a3f;
+    --accent-dim: rgba(76, 122, 63, 0.14);
+    --red: #c1553a;
+    --red-glow: rgba(193, 85, 58, 0.18);
+    --yellow: #c99a3a;
+    --yellow-glow: rgba(201, 154, 58, 0.18);
+    --blue: #4a7f8c;
+    --blue-glow: rgba(74, 127, 140, 0.18);
+    --green: #4c9a5b;
+    --green-glow: rgba(76, 154, 91, 0.18);
+    --brown: #8a5a34;
+    --brown-glow: rgba(138, 90, 52, 0.18);
+    --gray: #7d8570;
+    --gray-glow: rgba(125, 133, 112, 0.18);
+    --header-grad: linear-gradient(135deg, #faf9f2 0%, #f3f1e7 100%);
+    --chart-tooltip-bg: rgba(47, 58, 37, 0.92);
+    --chart-grid: rgba(59, 79, 49, 0.08);
+    --chart-grid-y: rgba(59, 79, 49, 0.12);
+    --chart-ticks: rgba(59, 79, 49, 0.45);
+    --btn-active-bg: linear-gradient(135deg, rgba(76, 122, 63, 0.16), rgba(76, 122, 63, 0.06));
+    --btn-active-border: rgba(76, 122, 63, 0.4);
+    --cal-hover: rgba(76, 122, 63, 0.1);
+    --cal-dim: rgba(59, 79, 49, 0.25);
+    --cal-sel: #4c7a3f;
+    --week-hover: rgba(76, 122, 63, 0.12);
+}
+
+:root[data-theme="vintage"] {
+    --bg-0: #241a12;
+    --bg-1: #2e2118;
+    --bg-2: #3a2a1e;
+    --bg-card: #362719;
+    --bg-card-h: #40301f;
+    --border: rgba(255, 224, 178, 0.1);
+    --border-h: rgba(255, 224, 178, 0.18);
+    --text-1: #f2e4cf;
+    --text-2: rgba(242, 228, 207, 0.62);
+    --text-3: rgba(242, 228, 207, 0.32);
+    --accent: #d98e3e;
+    --accent-dim: rgba(217, 142, 62, 0.2);
+    --red: #c1503f;
+    --red-glow: rgba(193, 80, 63, 0.22);
+    --yellow: #dab24d;
+    --yellow-glow: rgba(218, 178, 77, 0.22);
+    --blue: #5f8a92;
+    --blue-glow: rgba(95, 138, 146, 0.22);
+    --green: #7a9463;
+    --green-glow: rgba(122, 148, 99, 0.22);
+    --brown: #8a5a34;
+    --brown-glow: rgba(138, 90, 52, 0.22);
+    --gray: #a08d78;
+    --gray-glow: rgba(160, 141, 120, 0.22);
+    --header-grad: linear-gradient(135deg, #2e2118 0%, #3a2a1e 100%);
+    --chart-tooltip-bg: rgba(36, 26, 18, 0.95);
+    --chart-grid: rgba(255, 224, 178, 0.06);
+    --chart-grid-y: rgba(255, 224, 178, 0.09);
+    --chart-ticks: rgba(255, 224, 178, 0.4);
+    --btn-active-bg: linear-gradient(135deg, rgba(217, 142, 62, 0.3), rgba(217, 142, 62, 0.12));
+    --btn-active-border: rgba(217, 142, 62, 0.5);
+    --cal-hover: rgba(255, 224, 178, 0.1);
+    --cal-dim: rgba(255, 224, 178, 0.22);
+    --cal-sel: #d98e3e;
+    --week-hover: rgba(217, 142, 62, 0.16);
 }
 
 /* ── Reset & Base ────────────────────────────────────────────────────────── */
@@ -197,8 +314,11 @@ body {
 }
 
 .settings-panel.open {
-    max-height: 600px;
-    /* needs to fit shift setup + agent name + counting toggle + theme + cloud sync */
+    max-height: 420px;
+    /* Rows can outgrow this (e.g. long Telegram note fields), so the panel
+       scrolls internally instead of clipping rows off the bottom. */
+    overflow-y: auto;
+    overflow-x: hidden;
 }
 
 .settings-inner {
@@ -601,7 +721,8 @@ body {
     transition: max-height 0.35s ease, opacity 0.2s ease, padding 0.3s ease, border 0.3s ease;
 }
 
-[data-theme="light"] .date-picker-panel {
+[data-theme="minimalist"] .date-picker-panel,
+[data-theme="organic"] .date-picker-panel {
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
 }
 
@@ -827,7 +948,8 @@ body {
     gap: 6px;
 }
 
-[data-theme="light"] .alltime-section {
+[data-theme="minimalist"] .alltime-section,
+[data-theme="organic"] .alltime-section {
     border-color: rgba(85, 77, 250, 0.2);
 }
 
@@ -1051,7 +1173,8 @@ body {
     white-space: nowrap;
 }
 
-[data-theme="light"] .toast {
+[data-theme="minimalist"] .toast,
+[data-theme="organic"] .toast {
     box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
@@ -1090,6 +1213,203 @@ body {
     color: var(--accent);
     border-color: rgba(108, 99, 255, 0.3);
     transform: scale(1.1);
+}
+
+/* ── Mini Modal (shared by Category Colors + Appearance pickers) ─────────── */
+.mini-modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    z-index: 600;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s ease;
+}
+
+.mini-modal-overlay.open {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.mini-modal {
+    width: 300px;
+    max-height: 80vh;
+    background: var(--bg-1);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.95) translateY(10px);
+    transition: transform 0.3s cubic-bezier(.34, 1.56, .64, 1);
+}
+
+.mini-modal-overlay.open .mini-modal {
+    transform: scale(1) translateY(0);
+}
+
+[data-theme="minimalist"] .mini-modal,
+[data-theme="organic"] .mini-modal {
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+}
+
+.mini-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.mini-modal-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--text-1);
+}
+
+.mini-modal-close {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-size: 11px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.mini-modal-close:hover {
+    color: var(--text-1);
+    border-color: var(--border-h);
+}
+
+.mini-modal-body {
+    padding: 12px 16px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.mini-modal-footer {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    flex-shrink: 0;
+}
+
+.mini-modal-footer .btn-save {
+    flex: 1;
+    justify-content: center;
+}
+
+/* ── Category Color Rows ──────────────────────────────────────────────────── */
+.cat-color-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.cat-color-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.cat-color-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+.cat-color-input {
+    width: 36px;
+    height: 28px;
+    padding: 2px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    cursor: pointer;
+}
+
+/* ── Theme Picker Rows ────────────────────────────────────────────────────── */
+.theme-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 8px;
+    border-radius: var(--radius-sm);
+    border: 1px solid transparent;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.theme-row:hover {
+    background: var(--bg-2);
+}
+
+.theme-row.selected {
+    background: var(--btn-active-bg);
+    border-color: var(--btn-active-border);
+}
+
+.theme-swatch {
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    flex-shrink: 0;
+    border: 1px solid var(--border-h);
+}
+
+.theme-row-name {
+    flex: 1;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--text-1);
+}
+
+.theme-row-check {
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--accent);
+    width: 14px;
+    text-align: center;
+}
+
+.theme-confirm-bar {
+    display: none;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    background: var(--bg-2);
+    flex-shrink: 0;
+}
+
+.theme-confirm-bar span {
+    flex: 1;
+    font-size: 11px;
+    color: var(--text-2);
+}
+
+.theme-confirm-bar .btn-save {
+    padding: 5px 10px;
+    font-size: 11px;
+    min-width: auto;
 }
 
 /* ── Detailed Chart Modal ───────────────────────────────────────────────── */
@@ -1131,7 +1451,8 @@ body {
     transform: scale(1) translateY(0);
 }
 
-[data-theme="light"] .detail-modal {
+[data-theme="minimalist"] .detail-modal,
+[data-theme="organic"] .detail-modal {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
 
@@ -1446,7 +1767,8 @@ body {
     animation: authFadeIn 0.4s ease-out;
 }
 
-[data-theme="light"] .name-modal {
+[data-theme="minimalist"] .name-modal,
+[data-theme="organic"] .name-modal {
     box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
 }
 

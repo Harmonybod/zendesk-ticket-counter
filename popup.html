@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="moody">
 
 <head>
   <meta charset="UTF-8" />
@@ -163,24 +163,21 @@
         <div class="settings-row settings-row-inline">
           <div class="settings-label-group">
             <span class="settings-label">Accent Color</span>
-            <span class="settings-sublabel">Theme color for the dashboard &amp; floater buttons</span>
+            <span class="settings-sublabel">Pick a color for each ticket category</span>
           </div>
-          <div class="settings-name-row" style="gap:6px;">
-            <input type="color" id="accent-color-input" value="#6c63ff" style="width:36px; height:28px; padding:2px; border-radius:6px; border:1px solid var(--border); background:var(--bg-2); cursor:pointer;" />
-            <button class="btn-save" id="accent-color-reset" title="Reset to default colors">Reset</button>
-          </div>
+          <button class="btn-save" id="open-category-color-modal">Customize</button>
         </div>
 
         <div class="settings-divider"></div>
 
-        <!-- Theme Toggle -->
+        <!-- Appearance / Theme -->
         <div class="settings-row settings-row-inline">
           <div class="settings-label-group">
             <span class="settings-label">Appearance</span>
-            <span class="settings-sublabel" id="theme-sublabel">Dark mode</span>
+            <span class="settings-sublabel" id="theme-sublabel">Dark / Moody</span>
           </div>
-          <button class="toggle-switch" id="theme-toggle" role="switch" aria-checked="true">
-            <span class="toggle-thumb"></span>
+          <button class="btn-save" id="open-theme-picker-modal">
+            <span class="theme-current-dot" id="theme-current-dot" style="display:inline-block; width:10px; height:10px; border-radius:50%; margin-right:6px; vertical-align:middle;"></span>Change
           </button>
         </div>
 
@@ -199,6 +196,68 @@
           <span class="settings-sublabel" id="tg-status" style="margin-top:4px; display:block;"></span>
         </div>
 
+      </div>
+    </div>
+
+    <!-- ── Category Color Picker Modal ── -->
+    <div class="mini-modal-overlay" id="category-color-modal" aria-hidden="true">
+      <div class="mini-modal">
+        <div class="mini-modal-header">
+          <span class="mini-modal-title">Category Colors</span>
+          <button class="mini-modal-close" id="category-color-close" title="Close">✕</button>
+        </div>
+        <div class="mini-modal-body">
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--red);"></span>
+            <span class="cat-color-name">Open</span>
+            <input type="color" class="cat-color-input" data-cat="open" value="#ff6b6b" />
+          </div>
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--yellow);"></span>
+            <span class="cat-color-name">New</span>
+            <input type="color" class="cat-color-input" data-cat="new" value="#ffd93d" />
+          </div>
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--blue);"></span>
+            <span class="cat-color-name">Team</span>
+            <input type="color" class="cat-color-input" data-cat="team" value="#74b9ff" />
+          </div>
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--green);"></span>
+            <span class="cat-color-name">Compliance</span>
+            <input type="color" class="cat-color-input" data-cat="compliance" value="#2ecc71" />
+          </div>
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--brown);"></span>
+            <span class="cat-color-name">Escalation</span>
+            <input type="color" class="cat-color-input" data-cat="escalation" value="#b5723e" />
+          </div>
+          <div class="cat-color-row">
+            <span class="cat-color-dot" style="background:var(--gray);"></span>
+            <span class="cat-color-name">Closed</span>
+            <input type="color" class="cat-color-input" data-cat="closed" value="#95a5a6" />
+          </div>
+        </div>
+        <div class="mini-modal-footer">
+          <button class="btn-save" id="category-color-reset-all">Reset to Defaults</button>
+          <button class="btn-save" id="category-color-done">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Appearance / Theme Picker Modal ── -->
+    <div class="mini-modal-overlay" id="theme-picker-modal" aria-hidden="true">
+      <div class="mini-modal">
+        <div class="mini-modal-header">
+          <span class="mini-modal-title">Appearance</span>
+          <button class="mini-modal-close" id="theme-picker-close" title="Close">✕</button>
+        </div>
+        <div class="mini-modal-body" id="theme-picker-list"></div>
+        <div class="theme-confirm-bar" id="theme-confirm-bar">
+          <span>Keep this theme?</span>
+          <button class="btn-save" id="theme-keep-btn">Keep</button>
+          <button class="btn-save" id="theme-revert-btn">Revert</button>
+        </div>
       </div>
     </div>
 

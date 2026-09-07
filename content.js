@@ -72,7 +72,7 @@
             .substring(0, 4);
     }
 
-    // ── Accent Color Helpers (used to tint floater buttons) ──────
+    // ── Color Helpers (used to shade floater buttons) ──────
     function hexToRgbParts(hex) {
         const h = hex.replace('#', '');
         const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
@@ -264,7 +264,7 @@
         overlayCreationInProgress = true;
 
         chrome.storage.local.get(
-            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'userAccentColor'],
+            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'categoryColors'],
             (settings) => {
                 overlayCreationInProgress = false;
                 if (chrome.runtime.lastError) return;
@@ -274,17 +274,18 @@
                 const isCircle = settings.buttonShape === 'circle';
                 const teamEnabled = !!settings.teamButtonEnabled;
                 const isHorizontal = settings.floaterLayout === 'horizontal';
-                const accent = settings.userAccentColor || null;
+                const categoryColors = settings.categoryColors || {};
 
                 const visibleCategories = CATEGORIES.filter(c => !c.optional || teamEnabled);
 
                 const buttonsHtml = visibleCategories.map(c => {
-                    let styleAttr = '';
-                    if (accent) {
-                        const tintLight = mixHexColors(c.base, accent, 0.35);
-                        const tintDark = mixHexColors(c.base, accent, 0.6);
-                        styleAttr = ` style="background: linear-gradient(135deg, ${tintLight} 0%, ${tintDark} 100%);"`;
-                    }
+                    // Per-category color picked in Settings (falls back to the
+                    // built-in base hue) drives a light/dark two-stop gradient,
+                    // matching the popup's stat dots and chart colors.
+                    const base = categoryColors[c.type] || c.base;
+                    const tintLight = mixHexColors(base, '#ffffff', 0.18);
+                    const tintDark = mixHexColors(base, '#000000', 0.22);
+                    const styleAttr = ` style="background: linear-gradient(135deg, ${tintLight} 0%, ${tintDark} 100%);"`;
                     const label = isCircle ? '' : c.label;
                     return `<button class="zd-btn ${c.cls}${isCircle ? ' circle-mode' : ''}" data-type="${c.type}" title="${c.title}"${styleAttr}>${label}</button>`;
                 }).join('');
@@ -345,11 +346,19 @@
                             return;
                         }
 
-                        showPlusAnimation(button, type);
-
                         // Send ADD_EVENT message to background
                         chrome.runtime.sendMessage({ action: 'ADD_EVENT', type, ticketNumber: ticketId }, (response) => {
+                            if (response && response.alreadyHandled) {
+                                // Same ticket, same category, already recorded today — don't
+                                // double-count it, just tell the agent it's already logged.
+                                const priorLabel = UNDO_TYPE_LABELS[response.priorType] || response.priorType;
+                                showToastNotification(`Ticket #${ticketId} already handled as ${priorLabel}`, 'remove', '');
+                                return;
+                            }
+
                             if (response && response.success) {
+                                showPlusAnimation(button, type);
+
                                 // Store to masterLogHistory & ticketPayeeIssues for Excel/Inspectors.
                                 // Routed through background.js's serialized write queue instead of
                                 // a direct storage get/set here — this used to race against the
@@ -376,7 +385,7 @@
     if (chrome.storage && chrome.storage.onChanged) {
         chrome.storage.onChanged.addListener((changes, area) => {
             if (area !== 'local') return;
-            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'userAccentColor'];
+            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors'];
             if (watched.some(k => k in changes)) {
                 const existing = document.getElementById(OVERLAY_ID);
                 if (existing) existing.remove();

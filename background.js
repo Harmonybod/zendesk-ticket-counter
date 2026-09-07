@@ -44,7 +44,7 @@ async function getLocal() {
             ticketPayeeIssues: {},
             agentName: '',
             countingEnabled: true,
-            theme: 'dark',
+            theme: 'moody',
             tgToken: '',
             tgChatId: '',
             shiftConfig: null
@@ -59,7 +59,7 @@ async function getLocal() {
           ticketPayeeIssues: result.ticketPayeeIssues ?? {},
           agentName: result.agentName ?? '',
           countingEnabled: result.countingEnabled !== false, // default true
-          theme: result.theme ?? 'dark',
+          theme: result.theme ?? 'moody',
           tgToken: result.tgToken ?? '',
           tgChatId: result.tgChatId ?? '',
           shiftConfig: result.shiftConfig ?? null
@@ -311,7 +311,11 @@ function dailyTotalsChanged(a, b) {
 // they only rode along the next time some other action happened to also
 // save dailyTotals, so a payee issue captured right before someone closed
 // their laptop could sit unsynced indefinitely.
-const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'theme', 'countingEnabled'];
+// 'theme' is deliberately excluded — appearance is a per-device preference
+// (like buttonShape/tapMode), and pullFromCloud never applied it locally
+// anyway, so treating it as cloud-relevant only pushed a value nothing
+// ever pulled back down.
+const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled'];
 
 async function saveAll(data) {
   // Always save to local first — this must never fail
@@ -351,6 +355,21 @@ function queueStorageWrite(fn) {
   return storageWriteQueue;
 }
 
+// ── Duplicate Ticket Guard ────────────────────
+// Finds the most recent ticketLog entry for this ticket on this date, so
+// addEvent can tell a same-category re-click (block it, nothing to do)
+// apart from a re-classification into a different category (allowed — the
+// ticket just moves columns in the CSV/XLSX export, see exportData's and
+// exportSingleDaySpreadsheet's per-ticket dedup, which keeps it from
+// appearing under both categories there).
+function findLastEntryForTicketOnDate(ticketLog, ticketNumber, dateKeyStr) {
+  for (let i = ticketLog.length - 1; i >= 0; i--) {
+    const entry = ticketLog[i];
+    if (entry.ticketNumber === ticketNumber && entry.date === dateKeyStr) return entry;
+  }
+  return null;
+}
+
 // ── Add Event ─────────────────────────────────
 
 async function addEvent(type, ticketNumber) {
@@ -358,6 +377,13 @@ async function addEvent(type, ticketNumber) {
     const ts = Date.now();
     const key = dateKey(ts);
     const data = await getAll();
+
+    if (ticketNumber) {
+      const prior = findLastEntryForTicketOnDate(data.ticketLog, ticketNumber, key);
+      if (prior && prior.type === type) {
+        return { success: false, alreadyHandled: true, priorType: prior.type };
+      }
+    }
 
     // Append event
     data.events.push({ type, timestamp: ts, ticketNumber: ticketNumber || null });

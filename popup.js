@@ -28,6 +28,27 @@ const COLORS = {
 };
 const DEFAULT_CATEGORY_HEX = Object.fromEntries(Object.entries(COLORS).map(([k, v]) => [k, v.border]));
 const CATEGORY_TO_CSS_VAR = { open: 'red', new: 'yellow', team: 'blue', compliance: 'green', escalation: 'brown', closed: 'gray' };
+const CATEGORY_LIST = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+
+// ── Themes ─────────────────────────────────────
+// Each swatch is [bg, accent] — enough to render a two-tone preview dot
+// without duplicating the full palette defined in popup.css.
+const THEMES = [
+    { key: 'moody', name: 'Dark / Moody', bg: '#171717', accent: '#10a37f' },
+    { key: 'minimalist', name: 'Light / Minimalist', bg: '#ffffff', accent: '#3f3f46' },
+    { key: 'vibrant', name: 'Vibrant / Colorful', bg: '#1e1638', accent: '#ff2e88' },
+    { key: 'organic', name: 'Nature / Organic', bg: '#faf9f2', accent: '#4c7a3f' },
+    { key: 'vintage', name: 'Retro / Vintage', bg: '#2e2118', accent: '#d98e3e' }
+];
+const THEME_NAMES = Object.fromEntries(THEMES.map(t => [t.key, t.name]));
+
+// Legacy stored values ('dark'/'light') map onto their closest new theme so
+// existing users don't get silently bumped to an unrelated palette.
+function normalizeThemeKey(theme) {
+    if (theme === 'light') return 'minimalist';
+    if (THEME_NAMES[theme]) return theme;
+    return 'moody';
+}
 
 // ── Feature Toggle State ──────────────────────
 let teamButtonEnabled = false;
@@ -57,7 +78,7 @@ function fmtShortDateStr(dateStr) {
     return `${parseInt(m)}/${parseInt(d)}`;
 }
 
-// ── Accent Color Helpers ──────────────────────
+// ── Color Helpers ──────────────────────────────
 function hexToRgb(hex) {
     const h = hex.replace('#', '');
     const full = h.length === 3 ? h.split('').map(c => c + c).join('') : h;
@@ -70,41 +91,44 @@ function hexToRgba(hex, alpha) {
     return `rgba(${r},${g},${b},${alpha})`;
 }
 
-function mixHex(hexA, hexB, ratio) {
-    const a = hexToRgb(hexA), b = hexToRgb(hexB);
-    const mix = (x, y) => Math.round(x + (y - x) * ratio);
-    const toHex = (v) => v.toString(16).padStart(2, '0');
-    return `#${toHex(mix(a.r, b.r))}${toHex(mix(a.g, b.g))}${toHex(mix(a.b, b.b))}`;
+// Applies a per-category color map (falling back to the defaults for any
+// category the user hasn't customized) across the dashboard: stat dots,
+// legend dots, progress bars, and chart colors all read the
+// --red/--yellow/--blue/--green/--brown/--gray CSS variables, so setting
+// those re-colors the whole popup in one pass.
+function applyCategoryColors(map) {
+    const root = document.documentElement;
+    CATEGORY_LIST.forEach((cat) => {
+        const hex = (map && map[cat]) || DEFAULT_CATEGORY_HEX[cat];
+        COLORS[cat] = { bg: hexToRgba(hex, 0.85), border: hex };
+        const varName = CATEGORY_TO_CSS_VAR[cat];
+        root.style.setProperty(`--${varName}`, hex);
+        root.style.setProperty(`--${varName}-glow`, hexToRgba(hex, 0.2));
+    });
+    if (chartInstance) renderChart();
 }
 
-// Applies (or clears) a user-chosen accent color across the dashboard:
-// stat dots, legend dots, progress bars, and chart colors all read the
-// --red/--yellow/--blue/--green/--brown/--gray CSS variables, so tinting
-// those (plus --accent itself) re-themes the whole popup in one pass.
-function applyAccentColor(color) {
-    const root = document.documentElement;
-    if (color) {
-        root.style.setProperty('--accent', color);
-        const { r, g, b } = hexToRgb(color);
-        root.style.setProperty('--accent-dim', `rgba(${r}, ${g}, ${b}, 0.18)`);
-        Object.entries(DEFAULT_CATEGORY_HEX).forEach(([key, baseHex]) => {
-            const tinted = mixHex(baseHex, color, 0.35);
-            COLORS[key] = { bg: hexToRgba(tinted, 0.85), border: tinted };
-            const varName = CATEGORY_TO_CSS_VAR[key];
-            root.style.setProperty(`--${varName}`, tinted);
-            root.style.setProperty(`--${varName}-glow`, hexToRgba(tinted, 0.2));
-        });
-    } else {
-        root.style.removeProperty('--accent');
-        root.style.removeProperty('--accent-dim');
-        Object.entries(DEFAULT_CATEGORY_HEX).forEach(([key, baseHex]) => {
-            COLORS[key] = { bg: hexToRgba(baseHex, 0.85), border: baseHex };
-            const varName = CATEGORY_TO_CSS_VAR[key];
-            root.style.removeProperty(`--${varName}`);
-            root.style.removeProperty(`--${varName}-glow`);
-        });
-    }
-    if (chartInstance) renderChart();
+function populateCategoryColorInputs(map) {
+    document.querySelectorAll('.cat-color-input').forEach((input) => {
+        const cat = input.getAttribute('data-cat');
+        input.value = (map && map[cat]) || DEFAULT_CATEGORY_HEX[cat];
+    });
+}
+
+// ── Theme-aware chart colors ───────────────────
+// Reads the active theme's own CSS variables instead of hardcoding a
+// light/dark binary, so all 5 themes render charts/tooltips correctly.
+function getThemeChartColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name, fallback) => (cs.getPropertyValue(name) || '').trim() || fallback;
+    return {
+        gridColor: v('--chart-grid', 'rgba(255,255,255,0.04)'),
+        gridColorY: v('--chart-grid-y', 'rgba(255,255,255,0.06)'),
+        ticksColor: v('--chart-ticks', 'rgba(255,255,255,0.4)'),
+        tooltipBg: v('--chart-tooltip-bg', 'rgba(13,15,28,0.95)'),
+        tooltipBorder: v('--border-h', 'rgba(255,255,255,0.1)'),
+        emptyColor: v('--text-3', 'rgba(255,255,255,0.15)')
+    };
 }
 
 // ── Team Button Feature Visibility ────────────
@@ -116,7 +140,7 @@ function applyTeamVisibility(enabled) {
 
 // ── Load New Feature Settings (Tap Mode, Shape, Team Button, Accent) ──────
 function loadFeatureSettings() {
-    chrome.storage.local.get(['tapMode', 'buttonShape', 'teamButtonEnabled', 'userAccentColor'], (res) => {
+    chrome.storage.local.get(['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors'], (res) => {
         if (chrome.runtime.lastError) return;
 
         if ($('tap-mode-toggle')) $('tap-mode-toggle').setAttribute('aria-checked', res.tapMode === 'double' ? 'true' : 'false');
@@ -126,8 +150,8 @@ function loadFeatureSettings() {
         if ($('team-button-toggle')) $('team-button-toggle').setAttribute('aria-checked', teamButtonEnabled ? 'true' : 'false');
         applyTeamVisibility(teamButtonEnabled);
 
-        if ($('accent-color-input')) $('accent-color-input').value = res.userAccentColor || '#6c63ff';
-        applyAccentColor(res.userAccentColor || null);
+        populateCategoryColorInputs(res.categoryColors || null);
+        applyCategoryColors(res.categoryColors || null);
 
         renderStats();
     });
@@ -302,10 +326,18 @@ function loadStats(callback) {
 
 // ── Settings & Theme ──────────────────────────
 function applyTheme(theme) {
-    document.documentElement.setAttribute('data-theme', theme || 'dark');
-    $('theme-toggle').setAttribute('aria-checked', theme === 'light' ? 'true' : 'false');
-    $('theme-sublabel').textContent = theme === 'light' ? 'Light mode' : 'Dark mode';
+    const key = normalizeThemeKey(theme);
+    document.documentElement.setAttribute('data-theme', key);
+    if ($('theme-sublabel')) $('theme-sublabel').textContent = THEME_NAMES[key];
+    updateThemeCurrentDot(key);
     if (chartInstance) renderChart(); // re-render to update tooltip colors
+}
+
+function updateThemeCurrentDot(key) {
+    const t = THEMES.find(x => x.key === key);
+    if ($('theme-current-dot') && t) {
+        $('theme-current-dot').style.background = `linear-gradient(135deg, ${t.bg}, ${t.accent})`;
+    }
 }
 
 function applySettingsUI() {
@@ -363,15 +395,60 @@ $('counting-toggle').addEventListener('click', () => {
     });
 });
 
-$('theme-toggle').addEventListener('click', () => {
-    const btn = $('theme-toggle');
-    const isNowLight = btn.getAttribute('aria-checked') !== 'true';
-    const newTheme = isNowLight ? 'light' : 'dark';
-    chrome.runtime.sendMessage({ action: 'SET_THEME', theme: newTheme }, () => {
-        stats.theme = newTheme;
-        applyTheme(newTheme);
+// ── Appearance / Theme Picker Modal ────────────
+let themeModalOriginal = null;
+
+function renderThemeList() {
+    const activeTheme = document.documentElement.getAttribute('data-theme') || 'moody';
+    $('theme-picker-list').innerHTML = THEMES.map(t => `
+        <div class="theme-row${t.key === activeTheme ? ' selected' : ''}" data-theme-key="${t.key}">
+            <span class="theme-swatch" style="background: linear-gradient(135deg, ${t.bg}, ${t.accent});"></span>
+            <span class="theme-row-name">${t.name}</span>
+            <span class="theme-row-check">${t.key === activeTheme ? '✓' : ''}</span>
+        </div>
+    `).join('');
+    $('theme-picker-list').querySelectorAll('.theme-row').forEach((row) => {
+        row.addEventListener('click', () => previewTheme(row.getAttribute('data-theme-key')));
     });
-});
+}
+
+function previewTheme(key) {
+    applyTheme(key);
+    renderThemeList();
+    $('theme-confirm-bar').style.display = (key === themeModalOriginal) ? 'none' : 'flex';
+}
+
+function openThemeModal() {
+    themeModalOriginal = document.documentElement.getAttribute('data-theme') || 'moody';
+    $('theme-confirm-bar').style.display = 'none';
+    renderThemeList();
+    $('theme-picker-modal').classList.add('open');
+    $('theme-picker-modal').setAttribute('aria-hidden', 'false');
+}
+
+function closeThemeModal(revertIfPending) {
+    if (revertIfPending && document.documentElement.getAttribute('data-theme') !== themeModalOriginal) {
+        applyTheme(themeModalOriginal);
+    }
+    $('theme-picker-modal').classList.remove('open');
+    $('theme-picker-modal').setAttribute('aria-hidden', 'true');
+}
+
+if ($('open-theme-picker-modal')) $('open-theme-picker-modal').addEventListener('click', openThemeModal);
+if ($('theme-picker-close')) $('theme-picker-close').addEventListener('click', () => closeThemeModal(true));
+
+if ($('theme-keep-btn')) {
+    $('theme-keep-btn').addEventListener('click', () => {
+        const key = document.documentElement.getAttribute('data-theme');
+        chrome.runtime.sendMessage({ action: 'SET_THEME', theme: key }, () => {
+            stats.theme = key;
+            showToast('✓ Theme saved');
+            closeThemeModal(false);
+        });
+    });
+}
+
+if ($('theme-revert-btn')) $('theme-revert-btn').addEventListener('click', () => closeThemeModal(true));
 
 // ── Tap Mode Toggle ────────────────────────────
 if ($('tap-mode-toggle')) {
@@ -407,21 +484,39 @@ if ($('team-button-toggle')) {
     });
 }
 
-// ── Accent Color Picker ────────────────────────
-if ($('accent-color-input')) {
-    $('accent-color-input').addEventListener('input', (e) => {
-        const color = e.target.value;
-        chrome.storage.local.set({ userAccentColor: color });
-        applyAccentColor(color);
+// ── Category Color Modal ───────────────────────
+if ($('open-category-color-modal')) {
+    $('open-category-color-modal').addEventListener('click', () => {
+        $('category-color-modal').classList.add('open');
+        $('category-color-modal').setAttribute('aria-hidden', 'false');
     });
 }
 
-if ($('accent-color-reset')) {
-    $('accent-color-reset').addEventListener('click', () => {
-        chrome.storage.local.remove('userAccentColor');
-        if ($('accent-color-input')) $('accent-color-input').value = '#6c63ff';
-        applyAccentColor(null);
-        showToast('✓ Accent color reset');
+function closeCategoryColorModal() {
+    $('category-color-modal').classList.remove('open');
+    $('category-color-modal').setAttribute('aria-hidden', 'true');
+}
+if ($('category-color-close')) $('category-color-close').addEventListener('click', closeCategoryColorModal);
+if ($('category-color-done')) $('category-color-done').addEventListener('click', closeCategoryColorModal);
+
+document.querySelectorAll('.cat-color-input').forEach((input) => {
+    input.addEventListener('input', (e) => {
+        const cat = e.target.getAttribute('data-cat');
+        chrome.storage.local.get(['categoryColors'], (res) => {
+            const map = { ...(res.categoryColors || {}) };
+            map[cat] = e.target.value;
+            chrome.storage.local.set({ categoryColors: map });
+            applyCategoryColors(map);
+        });
+    });
+});
+
+if ($('category-color-reset-all')) {
+    $('category-color-reset-all').addEventListener('click', () => {
+        chrome.storage.local.remove('categoryColors');
+        populateCategoryColorInputs(null);
+        applyCategoryColors(null);
+        showToast('✓ Colors reset to default');
     });
 }
 
@@ -583,16 +678,11 @@ function renderChart() {
         chartInstance = null;
     }
 
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const gridColor = isLight ? 'rgba(0,0,0,0.04)' : 'rgba(255,255,255,0.04)';
-    const gridColorY = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
-    const ticksColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
-    const tooltipBg = isLight ? 'rgba(26,29,53,0.95)' : 'rgba(13,15,28,0.95)';
-    const tooltipBorder = isLight ? 'rgba(0,0,0,0.1)' : 'rgba(255,255,255,0.1)';
+    const { gridColor, gridColorY, ticksColor, tooltipBg, tooltipBorder, emptyColor } = getThemeChartColors();
 
     if (!data) {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.fillStyle = isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
+        ctx.fillStyle = emptyColor;
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
@@ -1004,15 +1094,12 @@ function renderDetailChart(response) {
         detailChartInstance = null;
     }
 
-    const isLight = document.documentElement.getAttribute('data-theme') === 'light';
-    const gridColor = isLight ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.06)';
-    const ticksColor = isLight ? 'rgba(0,0,0,0.4)' : 'rgba(255,255,255,0.4)';
-    const tooltipBg = isLight ? 'rgba(26,29,53,0.95)' : 'rgba(13,15,28,0.95)';
+    const { gridColor, ticksColor, tooltipBg, emptyColor } = getThemeChartColors();
 
     const chartData = response.data;
     if (!chartData || !chartData.length) {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.fillStyle = isLight ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.15)';
+        ctx.fillStyle = emptyColor;
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
@@ -1624,15 +1711,23 @@ function exportSingleDaySpreadsheet(targetDateStr) {
     let opArr = [], newArr = [], compArr = [], escArr = [], clsdArr = [];
 
     const ticketLog = (stats && stats.ticketLog) ? stats.ticketLog : [];
-    ticketLog.forEach(t => {
-        if (t.date === targetDateStr) {
-            if (t.type === 'open') opArr.push(t.ticketNumber);
-            if (t.type === 'new') newArr.push(t.ticketNumber);
-            if (t.type === 'team') opArr.push(t.ticketNumber); // Team merges into Open — no separate column
-            if (t.type === 'compliance') compArr.push(t.ticketNumber);
-            if (t.type === 'escalation') escArr.push(t.ticketNumber);
-            if (t.type === 'closed') clsdArr.push(t.ticketNumber);
-        }
+
+    // A ticket re-classified twice in one day (e.g. logged as Open, then
+    // later moved to New) should only appear once in the export — under its
+    // most recent category — not once per category it ever passed through.
+    // Keep only the latest entry per ticket number for this date (mirrors
+    // the same dedup background.js's CSV export already does).
+    const sameDay = ticketLog.filter(t => t.date === targetDateStr).sort((a, b) => a.timestamp - b.timestamp);
+    const latestByTicket = new Map();
+    sameDay.forEach(t => latestByTicket.set(t.ticketNumber, t));
+
+    latestByTicket.forEach(t => {
+        if (t.type === 'open') opArr.push(t.ticketNumber);
+        if (t.type === 'new') newArr.push(t.ticketNumber);
+        if (t.type === 'team') opArr.push(t.ticketNumber); // Team merges into Open — no separate column
+        if (t.type === 'compliance') compArr.push(t.ticketNumber);
+        if (t.type === 'escalation') escArr.push(t.ticketNumber);
+        if (t.type === 'closed') clsdArr.push(t.ticketNumber);
     });
 
     const shiftType = $('shift-type-input')?.value || 'Day';
