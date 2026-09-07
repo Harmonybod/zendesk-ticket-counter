@@ -51,6 +51,54 @@ function normalizeThemeKey(theme) {
     return 'moody';
 }
 
+// ── Level / Rank System ────────────────────────
+// Same 10 bands (min ticket count → color) as the XLSX header heat-map in
+// getHeaderColorForCount, given rank names/taglines and reused here to
+// drive the popup's level display. Keep both in sync if thresholds change.
+const LEVELS = [
+    { level: 1, name: 'Novice', min: 0, color: '#ED7D31', tagline: 'Just getting started' },
+    { level: 2, name: 'Initiate', min: 15, color: '#F1C40F', tagline: 'Finding your rhythm' },
+    { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF', tagline: 'Building momentum' },
+    { level: 4, name: 'Adept', min: 45, color: '#1D8348', tagline: 'Skilled and steady' },
+    { level: 5, name: 'Elite', min: 60, color: '#AED6F1', tagline: 'Among the best' },
+    { level: 6, name: 'Veteran', min: 70, color: '#2E86C1', tagline: 'Battle-tested' },
+    { level: 7, name: 'Master', min: 80, color: '#1B4F72', tagline: 'Command of the craft' },
+    { level: 8, name: 'Grandmaster', min: 90, color: '#922B21', tagline: 'Few can match you' },
+    { level: 9, name: 'Champion', min: 100, color: '#76448A', tagline: 'Leading the charge' },
+    { level: 10, name: 'Paragon', min: 120, color: '#5D6D7E', tagline: 'Peak performance' }
+];
+
+// One celebratory line per level-up (levels 2-10 — level 1 is just the
+// starting point, nothing to celebrate about being there).
+const LEVEL_UP_MESSAGES = {
+    2: "The fog lifts — you're no longer a Novice. Welcome, Initiate!",
+    3: 'Skills sharpening fast. Apprentice rank achieved — the real climb begins!',
+    4: 'Adept status unlocked! Your hands move faster than doubt can catch up.',
+    5: 'Elite tier reached. The queue trembles at your name.',
+    6: 'Veteran rank earned — scars of a thousand tickets, worn with pride.',
+    7: 'Mastery achieved! Few ever get to see this rank up close.',
+    8: 'Grandmaster! Legends are being written in your ticket log.',
+    9: 'Champion of the Queue! Triple digits — the crowd roars.',
+    10: 'PARAGON. The pinnacle. You are the standard others chase.'
+};
+
+function getLevelInfo(totalCount) {
+    let current = LEVELS[0];
+    let next = null;
+    for (let i = 0; i < LEVELS.length; i++) {
+        if (totalCount >= LEVELS[i].min) {
+            current = LEVELS[i];
+            next = LEVELS[i + 1] || null;
+        }
+    }
+    let progress = 1;
+    if (next) {
+        progress = (totalCount - current.min) / (next.min - current.min);
+        progress = Math.max(0, Math.min(1, progress));
+    }
+    return { current, next, progress, totalCount };
+}
+
 // ── Feature Toggle State ──────────────────────
 let teamButtonEnabled = false;
 
@@ -598,6 +646,81 @@ function renderStats() {
         : `Open: ${at.open ?? 0} · New: ${at.new ?? 0} · Cmpl: ${at.compliance ?? 0} · Esc: ${at.escalation ?? 0} · Closed: ${at.closed ?? 0}`;
 
     renderLastTicket();
+    renderLevelSection();
+}
+
+// ── Level / Rank rendering + level-up celebration ─────────────────────────
+// Level is always computed off *today's* total regardless of which range
+// (Today/Week/Month) the stats grid is currently showing — it's a daily
+// rank, and dailyTotals for a new date key already starts it fresh.
+const LAST_SEEN_LEVEL_KEY = 'lastSeenLevel';
+
+function renderLevelSection() {
+    if (!stats || !stats.today) return;
+    const total = stats.today.total ?? 0;
+    const { current, next, progress } = getLevelInfo(total);
+
+    $('level-badge').textContent = `Lv. ${current.level}`;
+    $('level-name').textContent = current.name;
+    $('level-name').style.color = current.color;
+    $('level-tagline').textContent = current.tagline;
+    $('level-progress-fill').style.width = `${Math.round(progress * 100)}%`;
+    $('level-progress-fill').style.background = current.color;
+    $('level-count').textContent = next ? `${total} / ${next.min}` : `${total} (maxed)`;
+
+    checkLevelUp(current.level);
+}
+
+function checkLevelUp(currentLevel) {
+    const todayKey = fmtDateKey(new Date());
+    chrome.storage.local.get([LAST_SEEN_LEVEL_KEY], (res) => {
+        const stored = res[LAST_SEEN_LEVEL_KEY];
+        const lastLevel = (stored && stored.dateKey === todayKey) ? stored.level : 1;
+
+        if (currentLevel > lastLevel) {
+            chrome.storage.local.set({ [LAST_SEEN_LEVEL_KEY]: { level: currentLevel, dateKey: todayKey } });
+            showLevelUpCelebration(currentLevel);
+        } else if (!stored || stored.dateKey !== todayKey) {
+            // First render of a new day — just record the starting point,
+            // no celebration for simply being wherever we already are.
+            chrome.storage.local.set({ [LAST_SEEN_LEVEL_KEY]: { level: currentLevel, dateKey: todayKey } });
+        }
+    });
+}
+
+function showLevelUpCelebration(level) {
+    const info = LEVELS.find(l => l.level === level);
+    const msg = LEVEL_UP_MESSAGES[level];
+    if (!info || !msg) return;
+
+    const toast = $('level-up-toast');
+    $('level-up-rank').textContent = info.name.toUpperCase();
+    $('level-up-rank').style.color = info.color;
+    $('level-up-msg').textContent = msg;
+
+    spawnLevelUpBuzzer(info.color, level);
+
+    toast.classList.add('show');
+    clearTimeout(showLevelUpCelebration._t);
+    showLevelUpCelebration._t = setTimeout(() => toast.classList.remove('show'), 3200 + level * 150);
+}
+
+// Both the spark count and each spark's duration scale with level — a
+// bigger rank-up reads as a bigger, longer celebration.
+function spawnLevelUpBuzzer(color, level) {
+    const container = $('level-up-buzzer');
+    container.innerHTML = '';
+    const count = 10 + level * 3;
+    const baseDuration = 1.2 + level * 0.08;
+    for (let i = 0; i < count; i++) {
+        const span = document.createElement('span');
+        span.style.left = `${Math.random() * 100}%`;
+        span.style.background = color;
+        span.style.boxShadow = `0 0 6px ${color}`;
+        span.style.animationDuration = `${(baseDuration + Math.random() * 0.6).toFixed(2)}s`;
+        span.style.animationDelay = `${(Math.random() * 0.5).toFixed(2)}s`;
+        container.appendChild(span);
+    }
 }
 
 // ── Render last handled ticket ────────────────────────────────────────────

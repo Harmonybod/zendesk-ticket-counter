@@ -76,6 +76,19 @@
       </div>
     </header>
 
+    <!-- ── Level / Rank ── -->
+    <section class="level-section" id="level-section">
+      <div class="level-top-row">
+        <span class="level-badge" id="level-badge">Lv. 1</span>
+        <span class="level-name" id="level-name">Novice</span>
+        <span class="level-count" id="level-count">0 / 15</span>
+      </div>
+      <p class="level-tagline" id="level-tagline">Just getting started</p>
+      <div class="level-progress-track">
+        <div class="level-progress-fill" id="level-progress-fill"></div>
+      </div>
+    </section>
+
     <!-- ── Settings Panel (slide-down) ── -->
     <div class="settings-panel" id="settings-panel" aria-hidden="true">
       <div class="settings-inner">
@@ -714,6 +727,15 @@
 
   <!-- Toast notification -->
   <div class="toast" id="toast"></div>
+
+  <!-- Level-up celebration banner -->
+  <div class="level-up-toast" id="level-up-toast">
+    <div class="level-up-buzzer" id="level-up-buzzer"></div>
+    <div class="level-up-crown">👑</div>
+    <div class="level-up-headline">LEVEL UP</div>
+    <div class="level-up-rank" id="level-up-rank"></div>
+    <p class="level-up-msg" id="level-up-msg"></p>
+  </div>
 
   <script src="chart.min.js"></script>
   <script src="xlsx-writer.js"></script>
