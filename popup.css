@@ -2794,7 +2794,7 @@ body {
 
 .main-actions-row {
     display: grid;
-    grid-template-columns: 3fr 1fr;
+    grid-template-columns: 1fr;
     gap: 12px;
     margin-top: 12px;
 }

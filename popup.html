@@ -397,14 +397,7 @@
             <option value="Weekend">Weekend Shift</option>
           </select>
         </div>
-        <div class="remarks-row">
-          <label for="shift-remarks-input">Remarks</label>
-          <input type="text" id="shift-remarks-input" placeholder="Special notes..." />
-        </div>
       </div>
-      <button class="footer-btn export-btn" id="shift-download-csv" style="margin-top:12px; width:100%; justify-content:center;">
-        <span class="footer-icon">⬇</span> Download CSV
-      </button>
     </section>
 
     <!-- ── Last Handled Ticket ── -->
@@ -711,15 +704,11 @@
       <input type="file" id="backup-import-file" accept=".json" style="display: none;" />
     </div>
 
-    <!-- ── Generate Excel & Clear ── -->
+    <!-- ── Clear Data ── -->
     <div class="main-actions-row">
-      <button id="generate-excel-btn" class="btn-main-action btn-generate-excel">
-        <span class="icon icon-sm" style="color: white;"><svg><use href="#icon-file"/></svg></span>
-        Generate Excel File
-      </button>
       <button id="clear-data-btn" class="btn-main-action btn-clear-data">
         <span class="icon icon-sm" style="color: white;"><svg><use href="#icon-trash"/></svg></span>
-        Clear
+        Clear All Data
       </button>
     </div>
 

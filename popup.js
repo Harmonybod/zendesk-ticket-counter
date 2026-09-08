@@ -1230,7 +1230,15 @@ $('export-json').addEventListener('click', () => {
 
 if ($('export-xls')) {
     $('export-xls').addEventListener('click', () => {
-        exportSingleDaySpreadsheet(fmtDateKey(new Date()));
+        // XLSX is a single-day shift report, so it only has one specific day
+        // to pull from — that's whatever day the "Today" date-picker has
+        // picked (matches how the CSV export already reads customRangeParams).
+        // Week/Month range mode has no single equivalent day, so it falls
+        // back to today, same as before.
+        const targetDateStr = (currentRange === 'today' && customRangeParams && customRangeParams.date)
+            ? customRangeParams.date
+            : fmtDateKey(new Date());
+        exportSingleDaySpreadsheet(targetDateStr);
         showToast('✓ Excel Spreadsheet generated');
     });
 }
@@ -1962,15 +1970,6 @@ function exportSingleDaySpreadsheet(targetDateStr) {
         displayCellDate, targetDateStr,
         opArr, newArr, compArr, escArr, clsdArr, payeeIssues
     );
-}
-
-// ── Generate Excel Button Handler ─────────────────────────────────────────
-if ($('generate-excel-btn')) {
-    $('generate-excel-btn').addEventListener('click', () => {
-        const todayStr = fmtDateKey(new Date());
-        exportSingleDaySpreadsheet(todayStr);
-        showToast('✓ Excel Spreadsheet generated');
-    });
 }
 
 // ── Security PIN Panel Handler ────────────────────────────────────────────
