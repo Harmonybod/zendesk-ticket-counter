@@ -111,7 +111,12 @@
     </section>
 
     <section class="panel-section">
-      <h2 class="panel-title">🏆 Weekly Leaderboard</h2>
+      <h2 class="panel-title">🏆 Team Leaderboard</h2>
+      <div class="chart-view-toggle">
+        <button class="chart-view-btn active" id="lb-period-week" data-lb-period="week">Week</button>
+        <button class="chart-view-btn" id="lb-period-month" data-lb-period="month">Month</button>
+      </div>
+      <div class="leaderboard-period-label" id="leaderboard-period-label">Last Week</div>
       <div id="leaderboard-list" class="leaderboard-list"></div>
     </section>
 

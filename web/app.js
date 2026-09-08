@@ -59,17 +59,25 @@ function getCurrentMonthKeys() {
     return keys;
 }
 
-function getCurrentWeekKey() {
+function getLastWeekKey() {
     const now = new Date();
-    const day = now.getDay();
-    const monday = new Date(now);
-    monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+    const lastWeek = new Date(now);
+    lastWeek.setDate(now.getDate() - 7);
+    const day = lastWeek.getDay();
+    const monday = new Date(lastWeek);
+    monday.setDate(lastWeek.getDate() - (day === 0 ? 6 : day - 1));
     monday.setHours(0, 0, 0, 0);
     const year = monday.getFullYear();
     const startOfYear = new Date(year, 0, 1);
     const days = Math.floor((monday - startOfYear) / 86400000);
     const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7);
     return `${year}-${String(weekNum).padStart(2, '0')}`;
+}
+
+function getLastMonthKey() {
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    return `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
 }
 
 function fmtShortDateStr(dateStr) {
@@ -106,6 +114,7 @@ let currentRange = 'today';
 let chartViewMode = 'tickets';
 let chartInstance = null;
 let userData = null; // { dailyTotals, ticketLog, masterLogHistory, ticketPayeeIssues, agentName }
+let currentLbPeriod = 'week';
 
 // ── Auth ────────────────────────────────────────
 $('signin-btn').addEventListener('click', async () => {
@@ -145,7 +154,7 @@ onAuthStateChanged(auth, async (user) => {
     await loadUserData(user.uid);
     renderAll();
 
-    loadLeaderboard().catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
+    loadLeaderboard(currentLbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
 });
 
 // ── Firestore Reads ─────────────────────────────
@@ -174,14 +183,35 @@ function safeParse(json, fallback) {
     try { return json ? JSON.parse(json) : fallback; } catch (e) { return fallback; }
 }
 
-async function loadLeaderboard() {
-    const weekKey = getCurrentWeekKey();
-    const snap = await getDocs(collection(db, 'weeklyLeaderboard', weekKey, 'users'));
+// Always the last *completed* period (never the in-progress current one —
+// same fix as the extension's popup) so nobody looks like a runaway leader
+// just for having synced the most tickets so far in a week/month that's
+// barely started. A finished period's total is stable for the entire next
+// one, then rolls over once that period itself ends.
+async function loadLeaderboard(period) {
+    currentLbPeriod = period || currentLbPeriod;
+    const isWeek = currentLbPeriod === 'week';
+    const collectionName = isWeek ? 'weeklyLeaderboard' : 'monthlyLeaderboard';
+    const periodKey = isWeek ? getLastWeekKey() : getLastMonthKey();
+
+    const periodLabelEl = $('leaderboard-period-label');
+    if (periodLabelEl) periodLabelEl.textContent = isWeek ? 'Last Week' : 'Last Month';
+
+    const snap = await getDocs(collection(db, collectionName, periodKey, 'users'));
     const rows = [];
     snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
-    rows.sort((a, b) => (b.weekTotal || 0) - (a.weekTotal || 0));
-    renderLeaderboard(rows);
+    const totalField = isWeek ? 'weekTotal' : 'monthTotal';
+    rows.sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
+    renderLeaderboard(rows, totalField, isWeek);
 }
+
+document.querySelectorAll('[data-lb-period]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-lb-period]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        loadLeaderboard(btn.dataset.lbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
+    });
+});
 
 // ── Active date keys for the selected range ────
 function getActiveDateKeys() {
@@ -316,20 +346,26 @@ function renderChart() {
 }
 
 // ── Render: leaderboard ─────────────────────────
-function renderLeaderboard(rows) {
+// Same rank badges as the extension's podium cards — the crown alone
+// (plus the "Last Week"/"Last Month" label above the list) is enough to
+// read as "this is the champion" without needing a second line of text
+// that the row's single-line layout would just clip anyway.
+const LB_RANK_BADGES = ['👑', '🥈', '🥉'];
+
+function renderLeaderboard(rows, totalField, isWeek) {
     const list = $('leaderboard-list');
     if (!rows.length) {
-        list.innerHTML = '<div class="leaderboard-empty">No leaderboard entries yet this week.</div>';
+        list.innerHTML = `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
         return;
     }
     list.innerHTML = rows.map((r, i) => `
         <div class="leaderboard-row rank-${i + 1}">
-            <span class="leaderboard-rank">${i + 1}</span>
+            <span class="leaderboard-rank">${LB_RANK_BADGES[i] || `#${i + 1}`}</span>
             ${r.photoUrl
                 ? `<img class="leaderboard-avatar" src="${r.photoUrl}" alt="" referrerpolicy="no-referrer" />`
                 : `<div class="leaderboard-avatar"></div>`}
             <span class="leaderboard-name">${escapeHtml(r.displayName || r.email || 'Agent')}</span>
-            <span class="leaderboard-total">${r.weekTotal || 0}</span>
+            <span class="leaderboard-total">${r[totalField] || 0}</span>
         </div>
     `).join('');
 }

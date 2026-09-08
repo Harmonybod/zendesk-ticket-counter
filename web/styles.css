@@ -392,6 +392,15 @@ h1, h2 { font-weight: 700; }
   margin-bottom: 10px;
 }
 
+.leaderboard-period-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  margin-bottom: 8px;
+}
+
 .leaderboard-list {
   background: var(--bg-card);
   border: 1px solid var(--border);
