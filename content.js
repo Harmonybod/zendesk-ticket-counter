@@ -292,6 +292,100 @@
         return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
     }
 
+    // ── Level / Rank System (mirrors popup.js's LEVELS/LEVEL_UP_MESSAGES —
+    // keep both in sync if thresholds or copy change) ────────────────────
+    const LEVELS = [
+        { level: 1, name: 'Novice', min: 0, color: '#ED7D31' },
+        { level: 2, name: 'Initiate', min: 15, color: '#F1C40F' },
+        { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF' },
+        { level: 4, name: 'Adept', min: 45, color: '#1D8348' },
+        { level: 5, name: 'Elite', min: 60, color: '#AED6F1' },
+        { level: 6, name: 'Veteran', min: 70, color: '#2E86C1' },
+        { level: 7, name: 'Master', min: 80, color: '#1B4F72' },
+        { level: 8, name: 'Grandmaster', min: 90, color: '#922B21' },
+        { level: 9, name: 'Champion', min: 100, color: '#76448A' },
+        { level: 10, name: 'Paragon', min: 120, color: '#5D6D7E' }
+    ];
+    const LEVEL_UP_MESSAGES = {
+        2: "The fog lifts — you're no longer a Novice. Welcome, Initiate!",
+        3: 'Skills sharpening fast. Apprentice rank achieved — the real climb begins!',
+        4: 'Adept status unlocked! Your hands move faster than doubt can catch up.',
+        5: 'Elite tier reached. The queue trembles at your name.',
+        6: 'Veteran rank earned — scars of a thousand tickets, worn with pride.',
+        7: 'Mastery achieved! Few ever get to see this rank up close.',
+        8: 'Grandmaster! Legends are being written in your ticket log.',
+        9: 'Champion of the Queue! Triple digits — the crowd roars.',
+        10: 'PARAGON. The pinnacle. You are the standard others chase.'
+    };
+    const LAST_SEEN_LEVEL_KEY = 'lastSeenLevel';
+
+    function getLevelForTotal(total) {
+        let current = LEVELS[0];
+        for (let i = 0; i < LEVELS.length; i++) {
+            if (total >= LEVELS[i].min) current = LEVELS[i];
+        }
+        return current;
+    }
+
+    // Storage is shared across every open Zendesk tab and the popup, so
+    // whichever context notices the level increase first wins the write —
+    // the others see the already-updated value and simply don't re-fire.
+    function checkLevelUpOnPage(currentLevel) {
+        if (!chrome.storage || !chrome.storage.local) return;
+        const todayKey = localDateKey(new Date());
+        chrome.storage.local.get([LAST_SEEN_LEVEL_KEY], (res) => {
+            if (chrome.runtime.lastError) return;
+            const stored = res[LAST_SEEN_LEVEL_KEY];
+            const lastLevel = (stored && stored.dateKey === todayKey) ? stored.level : 1;
+
+            if (currentLevel.level > lastLevel) {
+                chrome.storage.local.set({ [LAST_SEEN_LEVEL_KEY]: { level: currentLevel.level, dateKey: todayKey } });
+                showPageLevelUpCelebration(currentLevel);
+            } else if (!stored || stored.dateKey !== todayKey) {
+                chrome.storage.local.set({ [LAST_SEEN_LEVEL_KEY]: { level: currentLevel.level, dateKey: todayKey } });
+            }
+        });
+    }
+
+    function showPageLevelUpCelebration(levelInfo) {
+        const msg = LEVEL_UP_MESSAGES[levelInfo.level];
+        if (!msg) return; // level 1 — nothing to celebrate about being there
+
+        const old = document.querySelector('.ztk-levelup-celebration');
+        if (old) old.remove();
+
+        const box = document.createElement('div');
+        box.className = 'ztk-levelup-celebration';
+        box.innerHTML = `
+            <div class="ztk-levelup-buzzer"></div>
+            <div class="ztk-levelup-crown">👑</div>
+            <div class="ztk-levelup-headline">LEVEL UP</div>
+            <div class="ztk-levelup-rank" style="color:${levelInfo.color};">${levelInfo.name.toUpperCase()}</div>
+            <p class="ztk-levelup-msg">${msg}</p>
+        `;
+        document.body.appendChild(box);
+
+        const buzzerContainer = box.querySelector('.ztk-levelup-buzzer');
+        const count = 10 + levelInfo.level * 3;
+        const baseDuration = 1.2 + levelInfo.level * 0.08;
+        for (let i = 0; i < count; i++) {
+            const span = document.createElement('span');
+            span.style.left = `${Math.random() * 100}%`;
+            span.style.background = levelInfo.color;
+            span.style.boxShadow = `0 0 6px ${levelInfo.color}`;
+            span.style.animationDuration = `${(baseDuration + Math.random() * 0.6).toFixed(2)}s`;
+            span.style.animationDelay = `${(Math.random() * 0.5).toFixed(2)}s`;
+            buzzerContainer.appendChild(span);
+        }
+
+        requestAnimationFrame(() => box.classList.add('show'));
+        const lifespan = 3600 + levelInfo.level * 150;
+        setTimeout(() => {
+            box.classList.remove('show');
+            setTimeout(() => box.remove(), 400);
+        }, lifespan);
+    }
+
     function updateButtonFx(btn, type, count) {
         const profile = BUTTON_FX_PROFILES[type];
         if (!profile) return;
@@ -319,6 +413,8 @@
             });
             const totalEl = overlay.querySelector('#zd-daily-total-num');
             if (totalEl) totalEl.textContent = dayTotal;
+
+            checkLevelUpOnPage(getLevelForTotal(dayTotal));
         });
     }
 

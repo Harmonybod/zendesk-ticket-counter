@@ -664,6 +664,34 @@ body {
     color: var(--text-1);
 }
 
+.payee-legend-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    font-size: 9px;
+    color: var(--text-2);
+}
+
+.payee-legend-row .legend-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    background: var(--bg-2);
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    padding: 2px 7px;
+    cursor: default;
+}
+
+.payee-legend-row .legend-swatch {
+    width: 8px;
+    height: 8px;
+    border-radius: 2px;
+    display: inline-block;
+    flex-shrink: 0;
+}
+
 .chart-header {
     display: flex;
     align-items: center;
@@ -1253,6 +1281,14 @@ body {
     font-size: 10.5px;
     font-weight: 600;
     color: var(--text-3);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.level-speed {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--accent);
     flex-shrink: 0;
     white-space: nowrap;
 }
@@ -2331,12 +2367,32 @@ body {
     color: var(--yellow);
 }
 
+.record-unit {
+    font-family: 'Inter', system-ui, sans-serif;
+    font-size: 7.5px;
+    color: var(--text-3);
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-top: 1px;
+    min-height: 9px;
+}
+
 .record-date {
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 8px;
     color: var(--text-2);
     margin-top: 2px;
     font-weight: 600;
+}
+
+.record-category-toggle {
+    margin-bottom: 10px;
+}
+
+.record-category-toggle .chart-view-btn {
+    font-size: 10px;
+    padding: 6px 2px;
 }
 
 .record-lbl {
@@ -2873,6 +2929,45 @@ body {
 }
 
 /* ── Shift Config Inputs (inside Settings) ─────────────────────────────── */
+
+.weekly-shift-open-btn {
+  width: 100%;
+  justify-content: center;
+}
+
+.weekly-shift-note {
+  font-size: 9.5px;
+  color: var(--text-3);
+  line-height: 1.4;
+  margin: 6px 2px 0;
+}
+
+.weekly-shift-row {
+  display: grid;
+  grid-template-columns: 34px 1fr 62px 62px;
+  align-items: center;
+  gap: 6px;
+}
+
+.weekly-shift-day {
+  font-size: 10.5px;
+  font-weight: 800;
+  color: var(--text-2);
+  text-transform: uppercase;
+}
+
+.weekly-shift-row select,
+.weekly-shift-row input[type="time"] {
+  width: 100%;
+  padding: 5px 4px;
+  border: 1px solid var(--border);
+  background-color: var(--bg-2);
+  color: var(--text-1);
+  border-radius: 6px;
+  box-sizing: border-box;
+  font-family: 'Inter', system-ui, sans-serif;
+  font-size: 10px;
+}
 
 .shift-settings-grid {
   display: grid;

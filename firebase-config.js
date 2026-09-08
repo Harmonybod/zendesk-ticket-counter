@@ -436,15 +436,16 @@ function getLastWeekKey() {
  * @param {string} photoUrl - User profile photo URL
  * @param {number} weekTotal - Total tickets for the week
  */
-async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, displayName, photoUrl, weekTotal) {
+async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, displayName, photoUrl, weekTotal, weekPeakSpeed) {
   const url = `${FIRESTORE_BASE}/weeklyLeaderboard/${weekKey}/users/${encodeURIComponent(uid)}`;
-  
+
   const body = {
     fields: {
       email: { stringValue: email || '' },
       displayName: { stringValue: displayName || email || '' },
       photoUrl: { stringValue: photoUrl || '' },
       weekTotal: { integerValue: String(weekTotal) },
+      weekPeakSpeed: { doubleValue: weekPeakSpeed || 0 },
       weekKey: { stringValue: weekKey },
       lastUpdated: { integerValue: String(Date.now()) }
     }
@@ -497,6 +498,7 @@ async function readWeeklyLeaderboard(idToken, weekKey) {
       displayName: f.displayName?.stringValue || '',
       photoUrl: f.photoUrl?.stringValue || '',
       weekTotal: parseInt(f.weekTotal?.integerValue || '0', 10),
+      weekPeakSpeed: parseFloat(f.weekPeakSpeed?.doubleValue ?? f.weekPeakSpeed?.integerValue ?? 0),
       weekKey: f.weekKey?.stringValue || weekKey
     };
   });
@@ -539,7 +541,7 @@ function getLastMonthKey() {
  * @param {string} photoUrl - User profile photo URL
  * @param {number} monthTotal - Total tickets for the month
  */
-async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displayName, photoUrl, monthTotal) {
+async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displayName, photoUrl, monthTotal, monthPeakSpeed) {
   const url = `${FIRESTORE_BASE}/monthlyLeaderboard/${monthKey}/users/${encodeURIComponent(uid)}`;
 
   const body = {
@@ -548,6 +550,7 @@ async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displ
       displayName: { stringValue: displayName || email || '' },
       photoUrl: { stringValue: photoUrl || '' },
       monthTotal: { integerValue: String(monthTotal) },
+      monthPeakSpeed: { doubleValue: monthPeakSpeed || 0 },
       monthKey: { stringValue: monthKey },
       lastUpdated: { integerValue: String(Date.now()) }
     }
@@ -600,6 +603,7 @@ async function readMonthlyLeaderboard(idToken, monthKey) {
       displayName: f.displayName?.stringValue || '',
       photoUrl: f.photoUrl?.stringValue || '',
       monthTotal: parseInt(f.monthTotal?.integerValue || '0', 10),
+      monthPeakSpeed: parseFloat(f.monthPeakSpeed?.doubleValue ?? f.monthPeakSpeed?.integerValue ?? 0),
       monthKey: f.monthKey?.stringValue || monthKey
     };
   });

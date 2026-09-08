@@ -82,6 +82,20 @@ const LEVEL_UP_MESSAGES = {
     10: 'PARAGON. The pinnacle. You are the standard others chase.'
 };
 
+// ── Speed (Tickets Per Hour) ───────────────────
+// A day's TPH = that day's ticket total divided by the elapsed time between
+// its first and last logged ticket (floored at 15 minutes so a single quick
+// ticket, or a short burst, doesn't read as an absurd spike). Needs
+// ticketLog timestamps, so a day with a dailyTotals count but no matching
+// ticketLog entries (legacy data) simply has no computable speed.
+function computeDayTPH(ticketLog, dateStr, totalForDay) {
+    if (!totalForDay) return null;
+    const timestamps = (ticketLog || []).filter(e => e.date === dateStr).map(e => e.timestamp);
+    if (!timestamps.length) return null;
+    const hours = Math.max((Math.max(...timestamps) - Math.min(...timestamps)) / 3600000, 0.25);
+    return totalForDay / hours;
+}
+
 function getLevelInfo(totalCount) {
     let current = LEVELS[0];
     let next = null;
@@ -668,6 +682,14 @@ function renderLevelSection() {
     $('level-progress-fill').style.background = current.color;
     $('level-count').textContent = next ? `${total} / ${next.min}` : `${total} (maxed)`;
 
+    // Live TPH — recalculated every render, so it climbs/settles throughout
+    // the day as more tickets land and more time passes (unlike the frozen,
+    // once-the-day-is-over speed *record* on the all-time leaderboard).
+    if ($('level-speed')) {
+        const tph = computeDayTPH(stats.ticketLog, stats.todayKey || fmtDateKey(new Date()), total);
+        $('level-speed').textContent = tph != null ? `⚡ ${tph.toFixed(1)} TPH` : '';
+    }
+
     checkLevelUp(current.level);
 }
 
@@ -819,6 +841,22 @@ function getActiveDateKeys() {
     return [];
 }
 
+// Distinct, stable palette for payee issue bars — one color per issue type
+// (cycled if there are more than PAYEE_PALETTE.length top issues) so the
+// same issue always reads as the same color instead of everything being a
+// single accent hue.
+const PAYEE_PALETTE = ['#6c63ff', '#ff6b6b', '#ffd93d', '#2ecc71', '#74b9ff', '#e17055', '#a29bfe', '#00cec9', '#fd79a8', '#fdcb6e'];
+
+// Short axis-label form of a (possibly long) issue name: initials of each
+// word when there's more than one word, else the first few letters.
+function abbreviateIssue(name) {
+    const words = String(name).trim().split(/\s+/).filter(w => w.length);
+    if (words.length >= 2) {
+        return words.map(w => w[0].toUpperCase()).join('').slice(0, 5);
+    }
+    return words[0] ? words[0].slice(0, 5).toUpperCase() : '?';
+}
+
 function buildPayeeIssueChartData() {
     if (!stats) return null;
     const activeDates = new Set(getActiveDateKeys());
@@ -844,19 +882,37 @@ function buildPayeeIssueChartData() {
         .sort((a, b) => b[1] - a[1])
         .slice(0, 6);
 
-    const accent = (getComputedStyle(document.documentElement).getPropertyValue('--accent') || '#6c63ff').trim();
+    const colors = top6.map((_, i) => PAYEE_PALETTE[i % PAYEE_PALETTE.length]);
 
     return {
-        labels: top6.map(([issue]) => issue),
+        labels: top6.map(([issue]) => abbreviateIssue(issue)),
+        fullLabels: top6.map(([issue]) => issue),
         datasets: [{
             label: 'Payee Issue Types',
             data: top6.map(([, count]) => count),
-            backgroundColor: hexToRgba(accent, 0.7),
-            borderColor: accent,
+            backgroundColor: colors.map(c => hexToRgba(c, 0.75)),
+            borderColor: colors,
             borderWidth: 1.5,
             borderRadius: 4
         }]
     };
+}
+
+function renderPayeeLegend(data) {
+    const el = $('payee-legend-row');
+    if (!el) return;
+    if (!data || !data.fullLabels) {
+        el.innerHTML = '';
+        el.style.display = 'none';
+        return;
+    }
+    el.style.display = 'flex';
+    const colors = data.datasets[0].borderColor;
+    el.innerHTML = data.fullLabels.map((full, i) => `
+        <span class="legend-chip" title="${full.replace(/"/g, '&quot;')}">
+            <span class="legend-swatch" style="background:${colors[i]}"></span>${data.labels[i]}
+        </span>
+    `).join('');
 }
 
 // ── Render chart ──────────────────────────────
@@ -877,6 +933,7 @@ function renderChart() {
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        renderPayeeLegend(null);
         return;
     }
 
@@ -896,7 +953,10 @@ function renderChart() {
                     titleColor: 'rgba(255,255,255,0.7)',
                     bodyColor: '#fff',
                     padding: 10,
-                    cornerRadius: 8
+                    cornerRadius: 8,
+                    callbacks: data.fullLabels ? {
+                        title: (items) => data.fullLabels[items[0].dataIndex] || items[0].label
+                    } : undefined
                 }
             },
             scales: {
@@ -921,12 +981,14 @@ function renderChart() {
             }
         }
     });
+
+    renderPayeeLegend(chartViewMode === 'payee' ? data : null);
 }
 
 // ── Chart View Toggle (Number of Tickets / Payee Issue Types) ─────────────
-document.querySelectorAll('.chart-view-btn').forEach(btn => {
+document.querySelectorAll('.chart-view-btn[data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.chart-view-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.chart-view-btn[data-view]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         chartViewMode = btn.dataset.view;
         if ($('chart-legend-row')) $('chart-legend-row').style.display = (chartViewMode === 'payee') ? 'none' : '';
@@ -1247,6 +1309,8 @@ if ($('export-xls')) {
 let detailChartInstance = null;
 let detailRange = 'today';
 let detailDateParam = null; // null = current/rolling
+let detailViewMode = 'tickets'; // 'tickets' | 'payee'
+let lastDetailResponse = null;
 
 function openDetailModal() {
     const modal = $('detail-modal');
@@ -1272,8 +1336,23 @@ function openDetailModal() {
         b.classList.toggle('active', b.dataset.drange === detailRange);
     });
 
+    // Inherit the Tickets/Payee view from the main chart it was expanded from
+    detailViewMode = chartViewMode;
+    document.querySelectorAll('[data-dview]').forEach(b => {
+        b.classList.toggle('active', b.dataset.dview === detailViewMode);
+    });
+
     loadDetailChart();
 }
+
+document.querySelectorAll('[data-dview]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-dview]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        detailViewMode = btn.dataset.dview;
+        if (lastDetailResponse) renderDetailChart(lastDetailResponse);
+    });
+});
 
 function closeDetailModal() {
     const modal = $('detail-modal');
@@ -1292,6 +1371,7 @@ function loadDetailChart() {
         dateParam: detailDateParam
     }, (response) => {
         if (chrome.runtime.lastError || !response || response.error) return;
+        lastDetailResponse = response;
         renderDetailChart(response);
     });
 }
@@ -1306,33 +1386,75 @@ function renderDetailChart(response) {
 
     const { gridColor, ticksColor, tooltipBg, emptyColor } = getThemeChartColors();
 
-    const chartData = response.data;
-    if (!chartData || !chartData.length) {
-        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.fillStyle = emptyColor;
-        ctx.font = '12px Inter, system-ui, sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
-        return;
+    const isPayee = detailViewMode === 'payee';
+    if ($('detail-legend')) $('detail-legend').style.display = isPayee ? 'none' : '';
+    if ($('detail-payee-legend-row')) $('detail-payee-legend-row').style.display = isPayee ? 'flex' : 'none';
+
+    let labels, datasets;
+
+    if (isPayee) {
+        const payee = response.payee;
+        if (!payee || !payee.topIssues.length) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.fillStyle = emptyColor;
+            ctx.font = '12px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('No payee issue data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            if ($('detail-payee-legend-row')) $('detail-payee-legend-row').innerHTML = '';
+            return;
+        }
+
+        labels = payee.buckets.map(b => b.label);
+        const colors = payee.topIssues.map((_, i) => PAYEE_PALETTE[i % PAYEE_PALETTE.length]);
+        datasets = payee.topIssues.map((issue, i) => ({
+            label: issue,
+            data: payee.buckets.map(b => b[issue] || 0),
+            borderColor: colors[i],
+            backgroundColor: hexToRgba(colors[i], 0.15),
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: colors[i],
+            tension: 0.3,
+            fill: false
+        }));
+
+        if ($('detail-payee-legend-row')) {
+            $('detail-payee-legend-row').innerHTML = payee.topIssues.map((full, i) => `
+                <span class="legend-chip" title="${full.replace(/"/g, '&quot;')}">
+                    <span class="legend-swatch" style="background:${colors[i]}"></span>${abbreviateIssue(full)}
+                </span>
+            `).join('');
+        }
+    } else {
+        const chartData = response.data;
+        if (!chartData || !chartData.length) {
+            ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+            ctx.fillStyle = emptyColor;
+            ctx.font = '12px Inter, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+            return;
+        }
+
+        labels = chartData.map(d => d.label);
+        let ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+        if (!teamButtonEnabled) ALL_TYPES = ALL_TYPES.filter(t => t !== 'team');
+        const TYPE_LABELS = { open: 'Open', new: 'New', team: 'Team', compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed' };
+
+        datasets = ALL_TYPES.map(t => ({
+            label: TYPE_LABELS[t],
+            data: chartData.map(d => d[t] ?? 0),
+            borderColor: COLORS[t].border,
+            backgroundColor: COLORS[t].bg.replace('0.85', '0.15'),
+            borderWidth: 2,
+            pointRadius: 3,
+            pointHoverRadius: 5,
+            pointBackgroundColor: COLORS[t].border,
+            tension: 0.3,
+            fill: false
+        }));
     }
-
-    const labels = chartData.map(d => d.label);
-    let ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
-    if (!teamButtonEnabled) ALL_TYPES = ALL_TYPES.filter(t => t !== 'team');
-    const TYPE_LABELS = { open: 'Open', new: 'New', team: 'Team', compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed' };
-
-    const datasets = ALL_TYPES.map(t => ({
-        label: TYPE_LABELS[t],
-        data: chartData.map(d => d[t] ?? 0),
-        borderColor: COLORS[t].border,
-        backgroundColor: COLORS[t].bg.replace('0.85', '0.15'),
-        borderWidth: 2,
-        pointRadius: 3,
-        pointHoverRadius: 5,
-        pointBackgroundColor: COLORS[t].border,
-        tension: 0.3,
-        fill: false
-    }));
 
     // Update title — clearly show what period is being viewed
     let title = 'Today (Hourly)';
@@ -1677,45 +1799,84 @@ function computeHistoricalAnalysis(logEntries) {
 }
 
 // ── Leaderboard Rank Processing ───────────────────────────────────────────
+// Three views over the same per-day history: highest single-day ticket
+// count, highest single-day speed (TPH), and highest level reached in a
+// day — the level is purely a function of that day's ticket total, so no
+// extra storage is needed to track it.
+let currentRecordCategory = 'ticket'; // 'ticket' | 'speed' | 'level'
+let lastDailyTotalsForRanks = null;
+
 function processLeaderboardRanks(dailyTotals) {
-    let highScoresArray = Object.keys(dailyTotals || {}).map(dateStr => {
+    lastDailyTotalsForRanks = dailyTotals;
+    const ticketLog = (stats && stats.ticketLog) || [];
+    const todayStr = fmtDateKey(new Date());
+
+    const daysArr = Object.keys(dailyTotals || {}).map(dateStr => {
         const counts = dailyTotals[dateStr] || {};
         const sum = (counts.open || 0) + (counts.new || 0) + (counts.team || 0) + (counts.compliance || 0) + (counts.escalation || 0) + (counts.closed || 0);
         const parts = dateStr.split('-');
         return {
             date: `${parts[1]}/${parts[2]}/${parts[0].slice(-2)}`,
             rawDate: dateStr,
-            score: sum
+            score: sum,
+            tph: computeDayTPH(ticketLog, dateStr, sum),
+            level: getLevelInfo(sum).current
         };
     });
 
-    highScoresArray.sort((a, b) => b.score - a.score);
-
-    const todayStr = fmtDateKey(new Date());
+    let sorted;
+    if (currentRecordCategory === 'speed') {
+        sorted = daysArr.filter(d => d.tph != null && d.tph > 0).sort((a, b) => b.tph - a.tph);
+    } else if (currentRecordCategory === 'level') {
+        sorted = [...daysArr].filter(d => d.score > 0).sort((a, b) => (b.level.level - a.level.level) || (b.score - a.score));
+    } else {
+        sorted = [...daysArr].filter(d => d.score > 0).sort((a, b) => b.score - a.score);
+    }
 
     for (let i = 0; i < 4; i++) {
         const cardEl = $(`rankCard-${i}`);
         const valEl = $(`rankVal-${i}`);
         const dateEl = $(`rankDate-${i}`);
+        const unitEl = $(`rankUnit-${i}`);
+        const entry = sorted[i];
 
-        if (highScoresArray[i] && highScoresArray[i].score > 0) {
-            if (valEl) valEl.textContent = highScoresArray[i].score;
-            if (dateEl) dateEl.textContent = highScoresArray[i].date;
+        if (entry) {
+            if (currentRecordCategory === 'speed') {
+                if (valEl) { valEl.textContent = entry.tph.toFixed(1); valEl.style.color = ''; }
+                if (unitEl) unitEl.textContent = 'TPH';
+            } else if (currentRecordCategory === 'level') {
+                if (valEl) { valEl.textContent = `Lv.${entry.level.level}`; valEl.style.color = entry.level.color; }
+                if (unitEl) unitEl.textContent = entry.level.name;
+            } else {
+                if (valEl) { valEl.textContent = entry.score; valEl.style.color = ''; }
+                if (unitEl) unitEl.textContent = 'tickets';
+            }
+            if (dateEl) dateEl.textContent = entry.date;
 
             if (cardEl) {
-                if (i === 0 && highScoresArray[i].rawDate === todayStr) {
+                if (i === 0 && entry.rawDate === todayStr) {
                     cardEl.classList.add('new-record-alert');
                 } else {
                     cardEl.classList.remove('new-record-alert');
                 }
             }
         } else {
-            if (valEl) valEl.textContent = "0";
+            if (valEl) { valEl.textContent = currentRecordCategory === 'speed' ? '0.0' : '0'; valEl.style.color = ''; }
+            if (unitEl) unitEl.textContent = '';
             if (dateEl) dateEl.textContent = "--/--/--";
             if (cardEl) cardEl.classList.remove('new-record-alert');
         }
     }
 }
+
+document.querySelectorAll('[data-record-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-record-cat]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentRecordCategory = btn.dataset.recordCat;
+        if (lastDailyTotalsForRanks) processLeaderboardRanks(lastDailyTotalsForRanks);
+    });
+});
 
 // ── Hourly Pacing Chart ───────────────────────────────────────────────────
 function drawHourlyPacingChart(logs) {
@@ -1958,9 +2119,7 @@ function exportSingleDaySpreadsheet(targetDateStr) {
         if (t.type === 'closed') clsdArr.push(t.ticketNumber);
     });
 
-    const shiftType = $('shift-type-input')?.value || 'Day';
-    const startTime12 = convertTo12Hour($('shift-start-input')?.value || '');
-    const endTime12 = convertTo12Hour($('shift-end-input')?.value || '');
+    const { shiftType, startTime12, endTime12 } = getEffectiveShiftFields(targetDateStr);
     const agentName = stats?.agentName || 'Zendesk Agent';
     const remarks = $('shift-remarks-input')?.value || '';
     const payeeIssues = stats?.ticketPayeeIssues || {};
@@ -2081,6 +2240,7 @@ if ($('backup-import-file')) {
 // period's total is final and stays displayed for the entire next one,
 // then rolls over once that period itself ends.
 let currentLbPeriod = 'week';
+let currentLbCategory = 'tickets'; // 'tickets' | 'speed'
 
 function renderTeamLeaderboard(period) {
     currentLbPeriod = period || currentLbPeriod;
@@ -2091,10 +2251,13 @@ function renderTeamLeaderboard(period) {
     if (!podium) return;
 
     const isWeek = currentLbPeriod === 'week';
-    const totalField = isWeek ? 'weekTotal' : 'monthTotal';
+    const isSpeed = currentLbCategory === 'speed';
+    const totalField = isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
     const action = isWeek ? 'GET_WEEKLY_LEADERBOARD' : 'GET_MONTHLY_LEADERBOARD';
     const periodLabel = isWeek ? 'Last Week' : 'Last Month';
     const championLabel = isWeek ? "Last Week's Champion" : "Last Month's Champion";
+    const scoreUnit = isSpeed ? 'TPH' : 'tickets';
+    const fmtScore = (v) => isSpeed ? (v || 0).toFixed(1) : (v || 0);
 
     // Show loading state
     podium.innerHTML = '<div class="lb-loading">Loading leaderboard…</div>';
@@ -2110,7 +2273,9 @@ function renderTeamLeaderboard(period) {
                 return;
             }
 
-            const entries = (response.entries || []).sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
+            const entries = (response.entries || [])
+                .filter(e => !isSpeed || (e[totalField] || 0) > 0)
+                .sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
 
             if (entries.length === 0) {
                 podium.innerHTML = `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
@@ -2131,7 +2296,7 @@ function renderTeamLeaderboard(period) {
             top3.forEach((user, i) => {
                 const meta = rankMeta[i];
                 const isChampion = i === 0;
-                const score = user[totalField] || 0;
+                const score = fmtScore(user[totalField]);
 
                 const card = document.createElement('div');
                 card.className = `lb-card lb-rank-${i + 1}${isChampion ? ' lb-crowned' : ''}`;
@@ -2150,7 +2315,7 @@ function renderTeamLeaderboard(period) {
                     ${avatarHtml}
                     <div class="lb-name">${displayName}</div>
                     <div class="lb-email-small">${emailShort}</div>
-                    <div class="lb-score">${score} <span>tickets</span></div>
+                    <div class="lb-score">${score} <span>${scoreUnit}</span></div>
                     ${isChampion ? `<div class="lb-winner-tag">🏆 ${championLabel}</div>` : ''}
                 `;
                 podium.appendChild(card);
@@ -2168,7 +2333,7 @@ function renderTeamLeaderboard(period) {
                             <span class="lb-row-rank">#${i + 4}</span>
                             <span class="lb-row-name">${name}</span>
                             <span class="lb-row-email">${u.email || ''}</span>
-                            <span class="lb-row-score">${u[totalField] || 0}</span>
+                            <span class="lb-row-score">${fmtScore(u[totalField])}</span>
                         </div>
                     `;
                 }).join('');
@@ -2199,7 +2364,20 @@ document.querySelectorAll('[data-lb-period]').forEach(btn => {
     });
 });
 
+document.querySelectorAll('[data-lb-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-lb-cat]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentLbCategory = btn.dataset.lbCat;
+        renderTeamLeaderboard(currentLbPeriod);
+    });
+});
+
 // ── Shift Config Inputs Auto-Save ─────────────────────────────────────────
+// savedDateKey marks "the user manually touched these fields today" — that's
+// what lets applyTodaysWeeklyShiftIfNeeded() tell a fresh manual edit apart
+// from a stale value left over from a previous day, so it knows whether
+// today's weekly-template entry is still allowed to auto-fill these fields.
 ['shift-type-input', 'shift-start-input', 'shift-end-input', 'shift-remarks-input'].forEach(id => {
     const el = $(id);
     if (el) {
@@ -2208,21 +2386,126 @@ document.querySelectorAll('[data-lb-period]').forEach(btn => {
                 shiftType: $('shift-type-input')?.value,
                 shiftStart: $('shift-start-input')?.value,
                 shiftEnd: $('shift-end-input')?.value,
-                shiftRemarks: $('shift-remarks-input')?.value
+                shiftRemarks: $('shift-remarks-input')?.value,
+                savedDateKey: fmtDateKey(new Date())
             };
             chrome.storage.local.set({ shiftConfig });
         });
     }
 });
 
+// ── Weekly Shift Configuration (recurring template, Mon–Sun) ─────────────
+const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.getDay() index
+let weeklyShiftConfigCache = null;
+
+function renderWeeklyShiftRows(config) {
+    const body = $('weekly-shift-body');
+    if (!body) return;
+    body.innerHTML = WEEK_DAYS.map(day => {
+        const c = (config && config[day]) || {};
+        const type = c.type || 'Day';
+        return `
+        <div class="weekly-shift-row" data-day="${day}">
+            <span class="weekly-shift-day">${day}</span>
+            <select class="weekly-shift-type">
+                <option value="Day"${type === 'Day' ? ' selected' : ''}>Day</option>
+                <option value="Night"${type === 'Night' ? ' selected' : ''}>Night</option>
+                <option value="Weekend"${type === 'Weekend' ? ' selected' : ''}>Weekend</option>
+                <option value="Off"${type === 'Off' ? ' selected' : ''}>Off</option>
+            </select>
+            <input type="time" class="weekly-shift-start" value="${c.start || ''}" />
+            <input type="time" class="weekly-shift-end" value="${c.end || ''}" />
+        </div>`;
+    }).join('');
+}
+
+function closeWeeklyShiftModal() {
+    $('weekly-shift-modal').classList.remove('open');
+    $('weekly-shift-modal').setAttribute('aria-hidden', 'true');
+}
+
+if ($('open-weekly-shift-modal')) {
+    $('open-weekly-shift-modal').addEventListener('click', () => {
+        renderWeeklyShiftRows(weeklyShiftConfigCache);
+        $('weekly-shift-modal').classList.add('open');
+        $('weekly-shift-modal').setAttribute('aria-hidden', 'false');
+    });
+}
+if ($('weekly-shift-close')) $('weekly-shift-close').addEventListener('click', closeWeeklyShiftModal);
+
+if ($('weekly-shift-save')) {
+    $('weekly-shift-save').addEventListener('click', () => {
+        const config = {};
+        document.querySelectorAll('.weekly-shift-row').forEach(row => {
+            const day = row.getAttribute('data-day');
+            config[day] = {
+                type: row.querySelector('.weekly-shift-type').value,
+                start: row.querySelector('.weekly-shift-start').value,
+                end: row.querySelector('.weekly-shift-end').value
+            };
+        });
+        chrome.storage.local.set({ weeklyShiftConfig: config }, () => {
+            weeklyShiftConfigCache = config;
+            applyTodaysWeeklyShiftIfNeeded();
+            showToast('✓ Weekly shift schedule saved');
+            closeWeeklyShiftModal();
+        });
+    });
+}
+
+// Auto-fills today's visible Start/End/Type fields from the weekly
+// template — unless the user already manually edited those fields today
+// (tracked via shiftConfig.savedDateKey), in which case that edit wins.
+function applyTodaysWeeklyShiftIfNeeded() {
+    if (!weeklyShiftConfigCache) return;
+    const todayDow = DOW_NAMES[new Date().getDay()];
+    const wd = weeklyShiftConfigCache[todayDow];
+    if (!wd) return;
+    const todayKey = fmtDateKey(new Date());
+    chrome.storage.local.get(['shiftConfig'], (res) => {
+        const manualToday = res.shiftConfig && res.shiftConfig.savedDateKey === todayKey;
+        if (manualToday) return;
+        if ($('shift-type-input')) $('shift-type-input').value = wd.type || 'Day';
+        if ($('shift-start-input')) $('shift-start-input').value = wd.start || '';
+        if ($('shift-end-input')) $('shift-end-input').value = wd.end || '';
+    });
+}
+
+// Returns the shift fields a single-day XLSX export should use for
+// targetDateStr: today's export reads straight off the visible fields
+// (which may have just been manually overridden for this export); any
+// other date falls back to the saved weekly template for that day of week.
+function getEffectiveShiftFields(targetDateStr) {
+    const isToday = targetDateStr === fmtDateKey(new Date());
+    if (!isToday && weeklyShiftConfigCache) {
+        const dow = DOW_NAMES[new Date(targetDateStr + 'T00:00:00').getDay()];
+        const wd = weeklyShiftConfigCache[dow];
+        if (wd) {
+            return {
+                shiftType: wd.type || 'Day',
+                startTime12: convertTo12Hour(wd.start || ''),
+                endTime12: convertTo12Hour(wd.end || '')
+            };
+        }
+    }
+    return {
+        shiftType: $('shift-type-input')?.value || 'Day',
+        startTime12: convertTo12Hour($('shift-start-input')?.value || ''),
+        endTime12: convertTo12Hour($('shift-end-input')?.value || '')
+    };
+}
+
 // Load saved shift config on init
-chrome.storage.local.get(['shiftConfig'], (res) => {
+chrome.storage.local.get(['shiftConfig', 'weeklyShiftConfig'], (res) => {
     if (res.shiftConfig) {
         if ($('shift-type-input')) $('shift-type-input').value = res.shiftConfig.shiftType || 'Day';
         if ($('shift-start-input')) $('shift-start-input').value = res.shiftConfig.shiftStart || '08:00';
         if ($('shift-end-input')) $('shift-end-input').value = res.shiftConfig.shiftEnd || '17:00';
         if ($('shift-remarks-input')) $('shift-remarks-input').value = res.shiftConfig.shiftRemarks || '';
     }
+    weeklyShiftConfigCache = res.weeklyShiftConfig || null;
+    applyTodaysWeeklyShiftIfNeeded();
 });
 
 // ── Init ──────────────────────────────────────

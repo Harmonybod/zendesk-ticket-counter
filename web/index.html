@@ -105,8 +105,10 @@
         <span class="legend-chip"><span class="legend-swatch brown-dot"></span>Escalation</span>
         <span class="legend-chip"><span class="legend-swatch gray-dot"></span>Closed</span>
       </div>
+      <div class="payee-legend-row" id="payee-legend-row" style="display:none;"></div>
       <div class="chart-wrap">
         <canvas id="main-chart"></canvas>
+        <button class="chart-expand-btn" id="chart-expand-btn" title="Open detailed chart">⛶</button>
       </div>
     </section>
 
@@ -115,6 +117,10 @@
       <div class="chart-view-toggle">
         <button class="chart-view-btn active" id="lb-period-week" data-lb-period="week">Week</button>
         <button class="chart-view-btn" id="lb-period-month" data-lb-period="month">Month</button>
+      </div>
+      <div class="chart-view-toggle">
+        <button class="chart-view-btn active" data-lb-cat="tickets">🎫 Tickets</button>
+        <button class="chart-view-btn" data-lb-cat="speed">⚡ Speed</button>
       </div>
       <div class="leaderboard-period-label" id="leaderboard-period-label">Last Week</div>
       <div id="leaderboard-list" class="leaderboard-list"></div>
@@ -136,6 +142,43 @@
     <footer class="footer-note">
       Synced from your Chrome extension account — refresh to pull the latest data.
     </footer>
+  </div>
+
+  <!-- ── Detailed Chart Modal ── -->
+  <div class="detail-modal-overlay" id="detail-modal" aria-hidden="true">
+    <div class="detail-modal">
+      <div class="detail-modal-header">
+        <div class="detail-modal-title">
+          <span id="detail-chart-title">Detailed View</span>
+        </div>
+        <div class="detail-modal-controls">
+          <nav class="detail-range-nav">
+            <button class="detail-range-btn active" data-drange="today">Today</button>
+            <button class="detail-range-btn" data-drange="week">Week</button>
+            <button class="detail-range-btn" data-drange="month">Month</button>
+          </nav>
+          <button class="detail-date-btn" id="detail-date-btn" title="Pick a date">📅</button>
+          <input type="date" id="detail-date-input" style="position:absolute;opacity:0;width:0;height:0;" />
+          <button class="detail-close-btn" id="detail-close-btn">✕</button>
+        </div>
+      </div>
+      <div class="chart-view-toggle" style="margin: 0 20px 10px;">
+        <button class="chart-view-btn active" data-dview="tickets">Number of Tickets</button>
+        <button class="chart-view-btn" data-dview="payee">Payee Issue Types</button>
+      </div>
+      <div class="detail-legend" id="detail-legend">
+        <span class="legend-chip"><span class="legend-swatch red-dot"></span>Open</span>
+        <span class="legend-chip"><span class="legend-swatch yellow-dot"></span>New</span>
+        <span class="legend-chip"><span class="legend-swatch blue-dot"></span>Team</span>
+        <span class="legend-chip"><span class="legend-swatch green-dot"></span>Compliance</span>
+        <span class="legend-chip"><span class="legend-swatch brown-dot"></span>Escalation</span>
+        <span class="legend-chip"><span class="legend-swatch gray-dot"></span>Closed</span>
+      </div>
+      <div class="payee-legend-row" id="detail-payee-legend-row" style="margin: 0 20px 10px;"></div>
+      <div class="detail-chart-wrap">
+        <canvas id="detail-chart"></canvas>
+      </div>
+    </div>
   </div>
 
   <script src="chart.min.js"></script>

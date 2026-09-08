@@ -32,7 +32,7 @@ let lastCloudSyncTime = 0;
 async function getLocal() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId', 'shiftConfig'],
+      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId', 'shiftConfig', 'weeklyShiftConfig'],
       (result) => {
         if (chrome.runtime.lastError) {
           console.error('[ZTK] Failed to read local storage:', chrome.runtime.lastError.message);
@@ -47,7 +47,8 @@ async function getLocal() {
             theme: 'moody',
             tgToken: '',
             tgChatId: '',
-            shiftConfig: null
+            shiftConfig: null,
+            weeklyShiftConfig: null
           });
           return;
         }
@@ -62,7 +63,8 @@ async function getLocal() {
           theme: result.theme ?? 'moody',
           tgToken: result.tgToken ?? '',
           tgChatId: result.tgChatId ?? '',
-          shiftConfig: result.shiftConfig ?? null
+          shiftConfig: result.shiftConfig ?? null,
+          weeklyShiftConfig: result.weeklyShiftConfig ?? null
         });
       }
     );
@@ -111,6 +113,56 @@ function getWeeklyTotal(dailyTotals) {
   return total;
 }
 
+// A day's TPH = that day's ticket total divided by the elapsed hours
+// between its first and last logged ticket (floored at 15 minutes).
+// Mirrors popup.js's computeDayTPH — keep both in sync.
+function computeDayTPH(ticketLog, dateStr, totalForDay) {
+  if (!totalForDay) return 0;
+  const timestamps = (ticketLog || []).filter(e => e.date === dateStr).map(e => e.timestamp);
+  if (!timestamps.length) return 0;
+  const hours = Math.max((Math.max(...timestamps) - Math.min(...timestamps)) / 3600000, 0.25);
+  return totalForDay / hours;
+}
+
+function getWeeklyPeakSpeed(dailyTotals, ticketLog) {
+  const now = new Date();
+  const day = now.getDay();
+  const monday = new Date(now);
+  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
+  monday.setHours(0, 0, 0, 0);
+
+  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+  let peak = 0;
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday);
+    d.setDate(monday.getDate() + i);
+    const key = dateKey(d.getTime());
+    const totals = dailyTotals[key];
+    if (!totals) continue;
+    const dayTotal = ALL_TYPES.reduce((s, t) => s + (totals[t] ?? 0), 0);
+    peak = Math.max(peak, computeDayTPH(ticketLog, key, dayTotal));
+  }
+  return peak;
+}
+
+function getMonthlyPeakSpeed(dailyTotals, ticketLog) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+  let peak = 0;
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    const totals = dailyTotals[key];
+    if (!totals) continue;
+    const dayTotal = ALL_TYPES.reduce((s, t) => s + (totals[t] ?? 0), 0);
+    peak = Math.max(peak, computeDayTPH(ticketLog, key, dayTotal));
+  }
+  return peak;
+}
+
 function getMonthlyTotal(dailyTotals) {
   const now = new Date();
   const year = now.getFullYear();
@@ -157,6 +209,7 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
     // sees a still-in-progress total inflate their apparent rank mid-week.
     const weekKey = getCurrentWeekKey();
     const weekTotal = getWeeklyTotal(dailyTotals);
+    const weekPeakSpeed = getWeeklyPeakSpeed(dailyTotals, ticketLog);
     await writeWeeklyLeaderboardEntry(
       session.uid,
       session.idToken,
@@ -164,11 +217,13 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
       session.email,
       settings.agentName || session.displayName || session.email,
       session.photoUrl,
-      weekTotal
+      weekTotal,
+      weekPeakSpeed
     );
 
     const monthKey = getCurrentMonthKey();
     const monthTotal = getMonthlyTotal(dailyTotals);
+    const monthPeakSpeed = getMonthlyPeakSpeed(dailyTotals, ticketLog);
     await writeMonthlyLeaderboardEntry(
       session.uid,
       session.idToken,
@@ -176,7 +231,8 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
       session.email,
       settings.agentName || session.displayName || session.email,
       session.photoUrl,
-      monthTotal
+      monthTotal,
+      monthPeakSpeed
     );
 
     console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly/monthly leaderboards');
@@ -656,12 +712,50 @@ async function getStatsForRange(rangeType, params) {
   };
 }
 
+// ── Payee Issue Type series for the detail modal's line chart ────────────
+// Buckets are whatever the caller defines (hour-of-day / day / 3-day group).
+// A ticket contributes its issue type once — at the bucket of its first
+// ticketLog entry within the range — since ticketPayeeIssues only ever
+// holds one (the latest) issue value per ticket, not one per event.
+function getPayeeBucketSeries(ticketLog, ticketPayeeIssues, validDates, bucketFn, bucketLabels) {
+  const seen = new Set();
+  const bucketTally = bucketLabels.map(() => ({}));
+  const overallTally = {};
+
+  [...ticketLog]
+    .filter(e => !validDates || validDates.has(e.date))
+    .sort((a, b) => a.timestamp - b.timestamp)
+    .forEach(entry => {
+      if (seen.has(entry.ticketNumber)) return;
+      seen.add(entry.ticketNumber);
+      const issue = ticketPayeeIssues[entry.ticketNumber];
+      if (!issue || issue === '-') return;
+      const idx = bucketFn(entry);
+      if (idx == null || idx < 0 || idx >= bucketLabels.length) return;
+      bucketTally[idx][issue] = (bucketTally[idx][issue] || 0) + 1;
+      overallTally[issue] = (overallTally[issue] || 0) + 1;
+    });
+
+  const topIssues = Object.entries(overallTally).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+
+  return {
+    topIssues,
+    buckets: bucketLabels.map((label, i) => {
+      const entry = { label };
+      topIssues.forEach(issue => { entry[issue] = bucketTally[i][issue] || 0; });
+      return entry;
+    })
+  };
+}
+
 // ── Detailed Stats (for line chart modal) ────
 
 async function getDetailedStats(range, dateParam) {
   const data = await getAll();
   const events = data.events;
   const dt = data.dailyTotals;
+  const ticketLog = data.ticketLog || [];
+  const ticketPayeeIssues = data.ticketPayeeIssues || {};
   const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
 
   if (range === 'today') {
@@ -681,7 +775,12 @@ async function getDetailedStats(range, dateParam) {
         hourly[hour][ev.type]++;
       }
     }
-    return { range: 'today', date: targetDate, data: hourly };
+    const payee = getPayeeBucketSeries(
+      ticketLog, ticketPayeeIssues, new Set([targetDate]),
+      (entry) => new Date(entry.timestamp).getHours(),
+      hourly.map(h => h.label)
+    );
+    return { range: 'today', date: targetDate, data: hourly, payee };
   }
 
   if (range === 'week') {
@@ -694,14 +793,19 @@ async function getDetailedStats(range, dateParam) {
       baseDate = new Date();
     }
     const keys = getLastNDaysKeys(7, baseDate);
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
     const daily = keys.map(k => {
       const d = new Date(k + 'T00:00:00');
-      const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
       const entry = { label: `${dayNames[d.getDay()]} ${d.getMonth()+1}/${d.getDate()}`, date: k };
       ALL_TYPES.forEach(t => entry[t] = dt[k]?.[t] ?? 0);
       return entry;
     });
-    return { range: 'week', data: daily };
+    const payee = getPayeeBucketSeries(
+      ticketLog, ticketPayeeIssues, new Set(keys),
+      (entry) => keys.indexOf(entry.date),
+      daily.map(d => d.label)
+    );
+    return { range: 'week', data: daily, payee };
   }
 
   if (range === 'month') {
@@ -715,6 +819,7 @@ async function getDetailedStats(range, dateParam) {
     const [y, m] = prefix.split('-').map(Number);
     const daysInMonth = new Date(y, m, 0).getDate();
     const grouped = [];
+    const validMonthDates = new Set();
     for (let start = 1; start <= daysInMonth; start += 3) {
       const end = Math.min(start + 2, daysInMonth);
       const label = start === end ? `${m}/${start}` : `${m}/${start}-${end}`;
@@ -722,13 +827,19 @@ async function getDetailedStats(range, dateParam) {
       ALL_TYPES.forEach(t => entry[t] = 0);
       for (let d = start; d <= end; d++) {
         const k = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+        validMonthDates.add(k);
         if (dt[k]) {
           ALL_TYPES.forEach(t => entry[t] += dt[k][t] ?? 0);
         }
       }
       grouped.push(entry);
     }
-    return { range: 'month', data: grouped };
+    const payee = getPayeeBucketSeries(
+      ticketLog, ticketPayeeIssues, validMonthDates,
+      (entry) => Math.floor((parseInt(entry.date.split('-')[2], 10) - 1) / 3),
+      grouped.map(g => g.label)
+    );
+    return { range: 'month', data: grouped, payee };
   }
 
   return { error: 'Invalid range' };
@@ -736,8 +847,25 @@ async function getDetailedStats(range, dateParam) {
 
 // ── Export ────────────────────────────────────
 
-// Determine shift info: use saved shiftConfig if available, otherwise fallback to day-of-week logic
-function getShiftInfo(dateStr, shiftConfig) {
+// Determine shift info for a given date. Priority: the saved weekly
+// template (recurring per day-of-week — the right source for a multi-day
+// CSV export spanning several different shifts), then the single manual
+// shiftConfig, then a hardcoded day-of-week fallback.
+const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getShiftInfo(dateStr, shiftConfig, weeklyShiftConfig) {
+  if (weeklyShiftConfig) {
+    const dow = DOW_NAMES[new Date(dateStr + 'T00:00:00').getDay()];
+    const wd = weeklyShiftConfig[dow];
+    if (wd && wd.type) {
+      return {
+        shift: wd.type,
+        startTime: wd.start ? convertTo12Hour(wd.start) : '8:00 AM',
+        endTime: wd.end ? convertTo12Hour(wd.end) : '5:00 PM'
+      };
+    }
+  }
+
   // If we have saved shift config, use it
   if (shiftConfig && shiftConfig.shiftType) {
     const startTime = shiftConfig.shiftStart ? convertTo12Hour(shiftConfig.shiftStart) : '8:00 AM';
@@ -900,7 +1028,7 @@ async function exportData(format, rangeType, rangeParams) {
   // Emit rows: one row per "slot" within each date group
   for (const date of dateGroups) {
     const colBuckets = dateGroupMap.get(date);
-    const shiftInfo = getShiftInfo(date, data.shiftConfig);
+    const shiftInfo = getShiftInfo(date, data.shiftConfig, data.weeklyShiftConfig);
     const [y, m, d] = date.split('-');
     const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
 
@@ -933,7 +1061,7 @@ async function exportData(format, rangeType, rangeParams) {
       .sort();
     for (const k of sorted) {
       const dt = data.dailyTotals[k];
-      const shiftInfo = getShiftInfo(k, data.shiftConfig);
+      const shiftInfo = getShiftInfo(k, data.shiftConfig, data.weeklyShiftConfig);
       const [y, m, d] = k.split('-');
       const fmtDate = `${parseInt(m)}/${parseInt(d)}/${y}`;
       const total = (dt.open ?? 0) + (dt.new ?? 0) + (dt.team ?? 0) +

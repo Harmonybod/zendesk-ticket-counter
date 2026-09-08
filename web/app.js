@@ -115,6 +115,7 @@ let chartViewMode = 'tickets';
 let chartInstance = null;
 let userData = null; // { dailyTotals, ticketLog, masterLogHistory, ticketPayeeIssues, agentName }
 let currentLbPeriod = 'week';
+let currentLbCategory = 'tickets'; // 'tickets' | 'speed'
 
 // ── Auth ────────────────────────────────────────
 $('signin-btn').addEventListener('click', async () => {
@@ -191,6 +192,7 @@ function safeParse(json, fallback) {
 async function loadLeaderboard(period) {
     currentLbPeriod = period || currentLbPeriod;
     const isWeek = currentLbPeriod === 'week';
+    const isSpeed = currentLbCategory === 'speed';
     const collectionName = isWeek ? 'weeklyLeaderboard' : 'monthlyLeaderboard';
     const periodKey = isWeek ? getLastWeekKey() : getLastMonthKey();
 
@@ -200,9 +202,10 @@ async function loadLeaderboard(period) {
     const snap = await getDocs(collection(db, collectionName, periodKey, 'users'));
     const rows = [];
     snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
-    const totalField = isWeek ? 'weekTotal' : 'monthTotal';
-    rows.sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
-    renderLeaderboard(rows, totalField, isWeek);
+    const totalField = isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
+    const filtered = isSpeed ? rows.filter(r => (r[totalField] || 0) > 0) : rows;
+    filtered.sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
+    renderLeaderboard(filtered, totalField, isWeek, isSpeed);
 }
 
 document.querySelectorAll('[data-lb-period]').forEach(btn => {
@@ -210,6 +213,15 @@ document.querySelectorAll('[data-lb-period]').forEach(btn => {
         document.querySelectorAll('[data-lb-period]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         loadLeaderboard(btn.dataset.lbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
+    });
+});
+
+document.querySelectorAll('[data-lb-cat]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-lb-cat]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentLbCategory = btn.dataset.lbCat;
+        loadLeaderboard(currentLbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
     });
 });
 
@@ -259,6 +271,24 @@ function buildTicketsChartData() {
     };
 }
 
+// Distinct, stable palette for payee issue bars — mirrors popup.js's
+// PAYEE_PALETTE so the same issue reads as roughly the same color across
+// the extension and the dashboard.
+const PAYEE_PALETTE = ['#6c63ff', '#ff6b6b', '#ffd93d', '#2ecc71', '#74b9ff', '#e17055', '#a29bfe', '#00cec9', '#fd79a8', '#fdcb6e'];
+
+function hexToRgba(hex, alpha) {
+    const h = hex.replace('#', '');
+    const num = parseInt(h, 16);
+    const r = (num >> 16) & 255, g = (num >> 8) & 255, b = num & 255;
+    return `rgba(${r},${g},${b},${alpha})`;
+}
+
+function abbreviateIssue(name) {
+    const words = String(name).trim().split(/\s+/).filter(w => w.length);
+    if (words.length >= 2) return words.map(w => w[0].toUpperCase()).join('').slice(0, 5);
+    return words[0] ? words[0].slice(0, 5).toUpperCase() : '?';
+}
+
 function buildPayeeIssueChartData() {
     const activeDates = new Set(getActiveDateKeys());
     const seenTickets = new Set();
@@ -275,18 +305,37 @@ function buildPayeeIssueChartData() {
 
     if (!tally.size) return null;
     const top6 = Array.from(tally.entries()).sort((a, b) => b[1] - a[1]).slice(0, 6);
+    const colors = top6.map((_, i) => PAYEE_PALETTE[i % PAYEE_PALETTE.length]);
 
     return {
-        labels: top6.map(([issue]) => issue),
+        labels: top6.map(([issue]) => abbreviateIssue(issue)),
+        fullLabels: top6.map(([issue]) => issue),
         datasets: [{
             label: 'Payee Issue Types',
             data: top6.map(([, count]) => count),
-            backgroundColor: 'rgba(16,163,127,0.6)',
-            borderColor: '#10a37f',
+            backgroundColor: colors.map(c => hexToRgba(c, 0.7)),
+            borderColor: colors,
             borderWidth: 1.5,
             borderRadius: 4
         }]
     };
+}
+
+function renderPayeeLegend(data) {
+    const el = $('payee-legend-row');
+    if (!el) return;
+    if (!data || !data.fullLabels) {
+        el.innerHTML = '';
+        el.style.display = 'none';
+        return;
+    }
+    el.style.display = 'flex';
+    const colors = data.datasets[0].borderColor;
+    el.innerHTML = data.fullLabels.map((full, i) => `
+        <span class="legend-chip" title="${full.replace(/"/g, '&quot;')}">
+            <span class="legend-swatch" style="background:${colors[i]}"></span>${data.labels[i]}
+        </span>
+    `).join('');
 }
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
@@ -304,6 +353,7 @@ function renderChart() {
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
+        renderPayeeLegend(null);
         return;
     }
 
@@ -325,7 +375,10 @@ function renderChart() {
                     titleColor: 'rgba(255,255,255,0.7)',
                     bodyColor: '#fff',
                     padding: 10,
-                    cornerRadius: 8
+                    cornerRadius: 8,
+                    callbacks: data.fullLabels ? {
+                        title: (items) => data.fullLabels[items[0].dataIndex] || items[0].label
+                    } : undefined
                 }
             },
             scales: {
@@ -343,6 +396,8 @@ function renderChart() {
             }
         }
     });
+
+    renderPayeeLegend(chartViewMode === 'payee' ? data : null);
 }
 
 // ── Render: leaderboard ─────────────────────────
@@ -352,7 +407,7 @@ function renderChart() {
 // that the row's single-line layout would just clip anyway.
 const LB_RANK_BADGES = ['👑', '🥈', '🥉'];
 
-function renderLeaderboard(rows, totalField, isWeek) {
+function renderLeaderboard(rows, totalField, isWeek, isSpeed) {
     const list = $('leaderboard-list');
     if (!rows.length) {
         list.innerHTML = `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
@@ -365,7 +420,7 @@ function renderLeaderboard(rows, totalField, isWeek) {
                 ? `<img class="leaderboard-avatar" src="${r.photoUrl}" alt="" referrerpolicy="no-referrer" />`
                 : `<div class="leaderboard-avatar"></div>`}
             <span class="leaderboard-name">${escapeHtml(r.displayName || r.email || 'Agent')}</span>
-            <span class="leaderboard-total">${r[totalField] || 0}</span>
+            <span class="leaderboard-total">${isSpeed ? (r[totalField] || 0).toFixed(1) + ' TPH' : (r[totalField] || 0)}</span>
         </div>
     `).join('');
 }
@@ -418,13 +473,293 @@ document.querySelectorAll('.range-btn').forEach(btn => {
 });
 
 // ── Chart view toggle ───────────────────────────
-document.querySelectorAll('.chart-view-btn').forEach(btn => {
+document.querySelectorAll('.chart-view-btn[data-view]').forEach(btn => {
     btn.addEventListener('click', () => {
-        document.querySelectorAll('.chart-view-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.chart-view-btn[data-view]').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         chartViewMode = btn.dataset.view;
         $('chart-legend-row').style.display = (chartViewMode === 'payee') ? 'none' : '';
         renderChart();
+    });
+});
+
+// ── Detailed Chart Modal (Number of Tickets / Payee Issue Types) ──────────
+// Client-side equivalent of the extension's background.js getDetailedStats
+// — same bucketing rules, just computed straight off the already-loaded
+// userData instead of a chrome.runtime message round trip.
+let detailChartInstance = null;
+let detailRange = 'today';
+let detailDateParam = null; // null = current/rolling
+let detailViewMode = 'tickets'; // 'tickets' | 'payee'
+const DOW_NAMES_DETAIL = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+function getPayeeBucketSeriesLocal(ticketLog, ticketPayeeIssues, validDates, bucketFn, bucketLabels) {
+    const seen = new Set();
+    const bucketTally = bucketLabels.map(() => ({}));
+    const overallTally = {};
+
+    [...ticketLog]
+        .filter(e => !validDates || validDates.has(e.date))
+        .sort((a, b) => a.timestamp - b.timestamp)
+        .forEach(entry => {
+            if (seen.has(entry.ticketNumber)) return;
+            seen.add(entry.ticketNumber);
+            const issue = ticketPayeeIssues[entry.ticketNumber];
+            if (!issue || issue === '-') return;
+            const idx = bucketFn(entry);
+            if (idx == null || idx < 0 || idx >= bucketLabels.length) return;
+            bucketTally[idx][issue] = (bucketTally[idx][issue] || 0) + 1;
+            overallTally[issue] = (overallTally[issue] || 0) + 1;
+        });
+
+    const topIssues = Object.entries(overallTally).sort((a, b) => b[1] - a[1]).slice(0, 6).map(([k]) => k);
+    return {
+        topIssues,
+        buckets: bucketLabels.map((label, i) => {
+            const entry = { label };
+            topIssues.forEach(issue => { entry[issue] = bucketTally[i][issue] || 0; });
+            return entry;
+        })
+    };
+}
+
+function getDetailedStatsLocal(range, dateParam) {
+    const dt = userData.dailyTotals || {};
+    const ticketLog = userData.ticketLog || [];
+    const ticketPayeeIssues = userData.ticketPayeeIssues || {};
+
+    if (range === 'today') {
+        const targetDate = dateParam || todayKey();
+        const hourly = [];
+        for (let h = 0; h < 24; h++) {
+            const entry = { label: `${h}:00`, hour: h };
+            ALL_TYPES.forEach(t => entry[t] = 0);
+            hourly.push(entry);
+        }
+        ticketLog.forEach(e => {
+            if (e.date === targetDate && ALL_TYPES.includes(e.type)) {
+                hourly[new Date(e.timestamp).getHours()][e.type]++;
+            }
+        });
+        const payee = getPayeeBucketSeriesLocal(
+            ticketLog, ticketPayeeIssues, new Set([targetDate]),
+            (e) => new Date(e.timestamp).getHours(),
+            hourly.map(h => h.label)
+        );
+        return { range: 'today', data: hourly, payee };
+    }
+
+    if (range === 'week') {
+        const baseDate = dateParam ? new Date(dateParam + 'T00:00:00') : new Date();
+        const keys = getLastNDaysKeys(7, baseDate);
+        const daily = keys.map(k => {
+            const d = new Date(k + 'T00:00:00');
+            const entry = { label: `${DOW_NAMES_DETAIL[d.getDay()]} ${d.getMonth() + 1}/${d.getDate()}`, date: k };
+            ALL_TYPES.forEach(t => entry[t] = dt[k]?.[t] ?? 0);
+            return entry;
+        });
+        const payee = getPayeeBucketSeriesLocal(
+            ticketLog, ticketPayeeIssues, new Set(keys),
+            (e) => keys.indexOf(e.date),
+            daily.map(d => d.label)
+        );
+        return { range: 'week', data: daily, payee };
+    }
+
+    if (range === 'month') {
+        const prefix = dateParam ? dateParam.substring(0, 7) : todayKey().substring(0, 7);
+        const [y, m] = prefix.split('-').map(Number);
+        const daysInMonth = new Date(y, m, 0).getDate();
+        const grouped = [];
+        const validMonthDates = new Set();
+        for (let start = 1; start <= daysInMonth; start += 3) {
+            const end = Math.min(start + 2, daysInMonth);
+            const label = start === end ? `${m}/${start}` : `${m}/${start}-${end}`;
+            const entry = { label };
+            ALL_TYPES.forEach(t => entry[t] = 0);
+            for (let d = start; d <= end; d++) {
+                const k = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+                validMonthDates.add(k);
+                if (dt[k]) ALL_TYPES.forEach(t => entry[t] += dt[k][t] ?? 0);
+            }
+            grouped.push(entry);
+        }
+        const payee = getPayeeBucketSeriesLocal(
+            ticketLog, ticketPayeeIssues, validMonthDates,
+            (e) => Math.floor((parseInt(e.date.split('-')[2], 10) - 1) / 3),
+            grouped.map(g => g.label)
+        );
+        return { range: 'month', data: grouped, payee };
+    }
+
+    return { error: 'Invalid range' };
+}
+
+function renderDetailChart(response) {
+    const ctx = $('detail-chart').getContext('2d');
+    if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
+
+    const isPayee = detailViewMode === 'payee';
+    $('detail-legend').style.display = isPayee ? 'none' : '';
+    $('detail-payee-legend-row').style.display = isPayee ? 'flex' : 'none';
+
+    const noData = (msg) => {
+        ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+        ctx.fillStyle = 'rgba(236,236,236,0.32)';
+        ctx.font = '12px Inter, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(msg, ctx.canvas.width / 2, ctx.canvas.height / 2);
+    };
+
+    let labels, datasets;
+
+    if (isPayee) {
+        const payee = response.payee;
+        if (!payee || !payee.topIssues.length) {
+            noData('No payee issue data for this period');
+            $('detail-payee-legend-row').innerHTML = '';
+            return;
+        }
+        labels = payee.buckets.map(b => b.label);
+        const colors = payee.topIssues.map((_, i) => PAYEE_PALETTE[i % PAYEE_PALETTE.length]);
+        datasets = payee.topIssues.map((issue, i) => ({
+            label: issue,
+            data: payee.buckets.map(b => b[issue] || 0),
+            borderColor: colors[i],
+            backgroundColor: hexToRgba(colors[i], 0.15),
+            borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: colors[i], tension: 0.3, fill: false
+        }));
+        $('detail-payee-legend-row').innerHTML = payee.topIssues.map((full, i) => `
+            <span class="legend-chip" title="${full.replace(/"/g, '&quot;')}">
+                <span class="legend-swatch" style="background:${colors[i]}"></span>${abbreviateIssue(full)}
+            </span>
+        `).join('');
+    } else {
+        const chartData = response.data;
+        if (!chartData || !chartData.length) { noData('No data for this period'); return; }
+        labels = chartData.map(d => d.label);
+        const TYPE_LABELS = { open: 'Open', new: 'New', team: 'Team', compliance: 'Compliance', escalation: 'Escalation', closed: 'Closed' };
+        datasets = ALL_TYPES.map(t => ({
+            label: TYPE_LABELS[t],
+            data: chartData.map(d => d[t] ?? 0),
+            borderColor: COLORS[t].border,
+            backgroundColor: COLORS[t].bg.replace('0.75', '0.15'),
+            borderWidth: 2, pointRadius: 3, pointHoverRadius: 5, pointBackgroundColor: COLORS[t].border, tension: 0.3, fill: false
+        }));
+    }
+
+    let title = 'Today (Hourly)';
+    if (detailRange === 'today') {
+        if (detailDateParam) { const [, m, d] = detailDateParam.split('-'); title = `${parseInt(m)}/${parseInt(d)} (Hourly)`; }
+    } else if (detailRange === 'week') {
+        if (detailDateParam) {
+            const end = new Date(detailDateParam + 'T00:00:00');
+            const start = new Date(end); start.setDate(start.getDate() - 6);
+            title = `${start.getMonth() + 1}/${start.getDate()} - ${end.getMonth() + 1}/${end.getDate()}`;
+        } else {
+            title = 'Last 7 Days';
+        }
+    } else if (detailRange === 'month') {
+        const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        if (detailDateParam) {
+            title = `${monthNames[parseInt(detailDateParam.split('-')[1]) - 1]} (3-Day Groups)`;
+        } else {
+            title = `${monthNames[new Date().getMonth()]} (3-Day Groups)`;
+        }
+    }
+    $('detail-chart-title').textContent = title;
+
+    detailChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 350, easing: 'easeInOutQuart' },
+            interaction: { mode: 'index', intersect: false },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: 'rgba(14,14,16,0.95)',
+                    borderColor: 'rgba(255,255,255,0.14)',
+                    borderWidth: 1,
+                    titleColor: 'rgba(255,255,255,0.7)',
+                    bodyColor: '#fff',
+                    padding: 10,
+                    cornerRadius: 8
+                }
+            },
+            scales: {
+                x: {
+                    grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                    ticks: {
+                        color: 'rgba(255,255,255,0.4)', font: { size: 9, family: 'Inter' },
+                        maxRotation: detailRange === 'today' ? 0 : 45, autoSkip: true,
+                        maxTicksLimit: detailRange === 'today' ? 12 : 15
+                    },
+                    border: { display: false }
+                },
+                y: {
+                    beginAtZero: true,
+                    grid: { color: 'rgba(255,255,255,0.07)', drawBorder: false },
+                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10, family: 'Inter' }, stepSize: 1, precision: 0 },
+                    border: { display: false }
+                }
+            }
+        }
+    });
+}
+
+function loadDetailChart() {
+    if (!userData) return;
+    renderDetailChart(getDetailedStatsLocal(detailRange, detailDateParam));
+}
+
+function openDetailModal() {
+    const modal = $('detail-modal');
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    detailRange = currentRange;
+    detailDateParam = null;
+    document.querySelectorAll('.detail-range-btn').forEach(b => b.classList.toggle('active', b.dataset.drange === detailRange));
+    detailViewMode = chartViewMode;
+    document.querySelectorAll('[data-dview]').forEach(b => b.classList.toggle('active', b.dataset.dview === detailViewMode));
+    loadDetailChart();
+}
+
+function closeDetailModal() {
+    const modal = $('detail-modal');
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    if (detailChartInstance) { detailChartInstance.destroy(); detailChartInstance = null; }
+}
+
+if ($('chart-expand-btn')) $('chart-expand-btn').addEventListener('click', (e) => { e.stopPropagation(); openDetailModal(); });
+if ($('detail-close-btn')) $('detail-close-btn').addEventListener('click', closeDetailModal);
+if ($('detail-modal')) $('detail-modal').addEventListener('click', (e) => { if (e.target === $('detail-modal')) closeDetailModal(); });
+
+document.querySelectorAll('.detail-range-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.detail-range-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        detailRange = btn.dataset.drange;
+        loadDetailChart();
+    });
+});
+
+if ($('detail-date-btn')) {
+    $('detail-date-btn').addEventListener('click', () => $('detail-date-input').showPicker());
+    $('detail-date-input').addEventListener('change', (e) => {
+        if (e.target.value) { detailDateParam = e.target.value; loadDetailChart(); }
+    });
+}
+
+document.querySelectorAll('[data-dview]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-dview]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        detailViewMode = btn.dataset.dview;
+        loadDetailChart();
     });
 });
 

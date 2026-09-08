@@ -371,7 +371,27 @@ h1, h2 { font-weight: 700; }
   flex-shrink: 0;
 }
 
+.payee-legend-row {
+  display: none;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.payee-legend-row .legend-chip {
+  padding: 6px 12px;
+  font-size: 12px;
+  cursor: default;
+}
+
+.payee-legend-row .legend-swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+}
+
 .chart-wrap {
+  position: relative;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -510,6 +530,159 @@ h1, h2 { font-weight: 700; }
   font-size: 11px;
   color: var(--text-3);
   padding: 18px;
+}
+
+/* ── Chart Expand Button ─────────────────────────────────────────────────── */
+.chart-expand-btn {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.chart-expand-btn:hover {
+  background: var(--bg-card-h);
+  color: var(--text-1);
+  border-color: var(--border-h);
+}
+
+/* ── Detailed Chart Modal ─────────────────────────────────────────────────── */
+.detail-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.detail-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.detail-modal {
+  width: min(760px, 92vw);
+  max-height: 88vh;
+  background: var(--bg-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  transform: scale(0.96) translateY(8px);
+  transition: transform 0.2s ease;
+}
+
+.detail-modal-overlay.open .detail-modal {
+  transform: scale(1) translateY(0);
+}
+
+.detail-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.detail-modal-title {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-1);
+}
+
+.detail-modal-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  position: relative;
+}
+
+.detail-range-nav {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-2);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+}
+
+.detail-range-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.detail-range-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.detail-date-btn,
+.detail-close-btn {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.detail-date-btn:hover,
+.detail-close-btn:hover {
+  color: var(--text-1);
+  border-color: var(--border-h);
+}
+
+.detail-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 0 20px 10px;
+}
+
+.detail-chart-wrap {
+  flex: 1;
+  min-height: 320px;
+  padding: 10px 20px 22px;
+  position: relative;
+}
+
+@media (max-width: 640px) {
+  .detail-modal { width: 96vw; }
+  .detail-modal-header { padding: 14px; }
+  .detail-legend, .payee-legend-row { padding-left: 14px; padding-right: 14px; }
+  .detail-chart-wrap { padding: 8px 14px 16px; min-height: 240px; }
 }
 
 /* ── Mobile ───────────────────────────────────────────────────────────── */

@@ -81,6 +81,7 @@
       <div class="level-top-row">
         <span class="level-badge" id="level-badge">Lv. 1</span>
         <span class="level-name" id="level-name">Novice</span>
+        <span class="level-speed" id="level-speed"></span>
         <span class="level-count" id="level-count">0 / 15</span>
       </div>
       <p class="level-tagline" id="level-tagline">Just getting started</p>
@@ -261,6 +262,20 @@
       </div>
     </div>
 
+    <!-- ── Weekly Shift Configuration Modal ── -->
+    <div class="mini-modal-overlay" id="weekly-shift-modal" aria-hidden="true">
+      <div class="mini-modal">
+        <div class="mini-modal-header">
+          <span class="mini-modal-title">Weekly Shift Schedule</span>
+          <button class="mini-modal-close" id="weekly-shift-close" title="Close">✕</button>
+        </div>
+        <div class="mini-modal-body weekly-shift-body" id="weekly-shift-body"></div>
+        <div class="mini-modal-footer">
+          <button class="btn-save" id="weekly-shift-save">Save Schedule</button>
+        </div>
+      </div>
+    </div>
+
     <!-- ── Appearance / Theme Picker Modal ── -->
     <div class="mini-modal-overlay" id="theme-picker-modal" aria-hidden="true">
       <div class="mini-modal">
@@ -343,6 +358,7 @@
           <span class="legend-dot gray-dot"></span> Close
         </div>
       </div>
+      <div class="payee-legend-row" id="payee-legend-row" style="display:none;"></div>
 
       <!-- ── Date Picker Panel ── -->
       <div class="date-picker-panel" id="date-picker-panel" aria-hidden="true">
@@ -380,6 +396,8 @@
       </h3>
     </div>
     <section class="section-box" id="shift-setup-settings" style="margin: 0 14px 12px;">
+      <button class="btn-save weekly-shift-open-btn" id="open-weekly-shift-modal">📅 Configure Weekly Shift Schedule</button>
+      <p class="weekly-shift-note">Set every day's shift once and save — CSV/XLSX exports use it automatically from then on, unless you change the fields below for a specific day.</p>
       <div class="shift-settings-grid">
         <div>
           <label for="shift-start-input">Start Time</label>
@@ -429,6 +447,10 @@
             <button class="detail-close-btn" id="detail-close-btn">✕</button>
           </div>
         </div>
+        <div class="chart-view-toggle" style="margin: 0 14px 8px;">
+          <button class="chart-view-btn active" id="detail-view-tickets" data-dview="tickets">Number of Tickets</button>
+          <button class="chart-view-btn" id="detail-view-payee" data-dview="payee">Payee Issue Types</button>
+        </div>
         <div class="detail-legend" id="detail-legend">
           <span class="legend-dot red-dot"></span> Open
           <span class="legend-dot yellow-dot"></span> New
@@ -437,6 +459,7 @@
           <span class="legend-dot brown-dot"></span> Esc
           <span class="legend-dot gray-dot"></span> Close
         </div>
+        <div class="payee-legend-row" id="detail-payee-legend-row" style="display:none; margin: 0 14px 8px;"></div>
         <div class="detail-chart-wrap">
           <canvas id="detail-chart"></canvas>
         </div>
@@ -473,24 +496,33 @@
       </h3>
     </div>
     <div class="section-box">
+      <div class="chart-view-toggle record-category-toggle">
+        <button class="chart-view-btn active" data-record-cat="ticket">🎫 Ticket</button>
+        <button class="chart-view-btn" data-record-cat="speed">⚡ Speed</button>
+        <button class="chart-view-btn" data-record-cat="level">👑 Level</button>
+      </div>
       <div class="records-grid">
         <div class="record-sub-card" id="rankCard-0">
           <div class="record-val" id="rankVal-0">0</div>
+          <div class="record-unit" id="rankUnit-0"></div>
           <div class="record-date" id="rankDate-0">--/--/--</div>
           <div class="record-lbl"><span class="badge-gold">#1</span> 1st PLACE</div>
         </div>
         <div class="record-sub-card" id="rankCard-1">
           <div class="record-val" id="rankVal-1">0</div>
+          <div class="record-unit" id="rankUnit-1"></div>
           <div class="record-date" id="rankDate-1">--/--/--</div>
           <div class="record-lbl"><span class="badge-silver">#2</span> 2nd PLACE</div>
         </div>
         <div class="record-sub-card" id="rankCard-2">
           <div class="record-val" id="rankVal-2">0</div>
+          <div class="record-unit" id="rankUnit-2"></div>
           <div class="record-date" id="rankDate-2">--/--/--</div>
           <div class="record-lbl"><span class="badge-bronze">#3</span> 3rd PLACE</div>
         </div>
         <div class="record-sub-card" id="rankCard-3">
           <div class="record-val" id="rankVal-3">0</div>
+          <div class="record-unit" id="rankUnit-3"></div>
           <div class="record-date" id="rankDate-3">--/--/--</div>
           <div class="record-lbl"><span class="badge-iron">#4</span> 4th PLACE</div>
         </div>
@@ -508,6 +540,10 @@
       <div class="chart-view-toggle">
         <button class="chart-view-btn active" id="lb-period-week" data-lb-period="week">Week</button>
         <button class="chart-view-btn" id="lb-period-month" data-lb-period="month">Month</button>
+      </div>
+      <div class="chart-view-toggle lb-category-toggle">
+        <button class="chart-view-btn active" data-lb-cat="tickets">🎫 Tickets</button>
+        <button class="chart-view-btn" data-lb-cat="speed">⚡ Speed</button>
       </div>
       <div class="weekly-lb-week-label" id="weekly-lb-week-label">Last Week</div>
       <!-- Top 3 Podium -->
