@@ -785,7 +785,14 @@
   position: relative;
   flex: 1 1 auto;
   min-height: 22px;
-  display: block;
+  /* A flex container (not display:block) so the button inside can fill it
+     with flex:1 1 auto — the same mechanism .btn-undo already relies on —
+     instead of height:100%, which doesn't reliably resolve against a
+     flex-grown parent and left category buttons stuck at their minimum
+     size while .btn-undo (still a direct, ungrown-wrapped flex item)
+     absorbed all the leftover space, including on resize. */
+  display: flex;
+  flex-direction: column;
 }
 
 .zd-btn-slot.circle-mode {
@@ -801,7 +808,6 @@
   color: white;
   border: none;
   width: 100%;
-  height: 100%;
   padding: 5px 1px;
   font-size: 10px;
   font-weight: 700;
