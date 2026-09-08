@@ -113,15 +113,30 @@ function getWeeklyTotal(dailyTotals) {
   return total;
 }
 
-// A day's TPH = that day's ticket total divided by the elapsed hours
-// between its first and last logged ticket (floored at 15 minutes).
-// Mirrors popup.js's computeDayTPH — keep both in sync.
-function computeDayTPH(ticketLog, dateStr, totalForDay) {
-  if (!totalForDay) return 0;
-  const timestamps = (ticketLog || []).filter(e => e.date === dateStr).map(e => e.timestamp);
+// A day's speed record = the most tickets logged within any single
+// 60-minute window that day — a rolling window checked at every ticket's
+// own timestamp (two-pointer sliding-window-max), not fixed clock-hour
+// buckets, so a genuine burst like 6:23-7:23 counts as one full hour
+// instead of being split across two buckets and undercounted. This
+// replaces the old "day total / elapsed time between first and last
+// ticket" average, which rewarded having less idle time in your day almost
+// as much as it rewarded actually handling more tickets, and made the
+// number keep drifting down the longer a shift went on.
+// Mirrors popup.js's computeDayPeakHourlyTickets — keep both in sync.
+function computeDayPeakHourlyTickets(ticketLog, dateStr) {
+  const timestamps = (ticketLog || [])
+    .filter(e => e.date === dateStr)
+    .map(e => e.timestamp)
+    .sort((a, b) => a - b);
   if (!timestamps.length) return 0;
-  const hours = Math.max((Math.max(...timestamps) - Math.min(...timestamps)) / 3600000, 0.25);
-  return totalForDay / hours;
+
+  let maxCount = 0;
+  let left = 0;
+  for (let right = 0; right < timestamps.length; right++) {
+    while (timestamps[right] - timestamps[left] > 3600000) left++;
+    maxCount = Math.max(maxCount, right - left + 1);
+  }
+  return maxCount;
 }
 
 function getWeeklyPeakSpeed(dailyTotals, ticketLog) {
@@ -131,16 +146,13 @@ function getWeeklyPeakSpeed(dailyTotals, ticketLog) {
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0, 0, 0, 0);
 
-  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
   let peak = 0;
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
     const key = dateKey(d.getTime());
-    const totals = dailyTotals[key];
-    if (!totals) continue;
-    const dayTotal = ALL_TYPES.reduce((s, t) => s + (totals[t] ?? 0), 0);
-    peak = Math.max(peak, computeDayTPH(ticketLog, key, dayTotal));
+    if (!dailyTotals[key]) continue;
+    peak = Math.max(peak, computeDayPeakHourlyTickets(ticketLog, key));
   }
   return peak;
 }
@@ -151,14 +163,11 @@ function getMonthlyPeakSpeed(dailyTotals, ticketLog) {
   const month = now.getMonth();
   const daysInMonth = new Date(year, month + 1, 0).getDate();
 
-  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
   let peak = 0;
   for (let d = 1; d <= daysInMonth; d++) {
     const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    const totals = dailyTotals[key];
-    if (!totals) continue;
-    const dayTotal = ALL_TYPES.reduce((s, t) => s + (totals[t] ?? 0), 0);
-    peak = Math.max(peak, computeDayTPH(ticketLog, key, dayTotal));
+    if (!dailyTotals[key]) continue;
+    peak = Math.max(peak, computeDayPeakHourlyTickets(ticketLog, key));
   }
   return peak;
 }
@@ -411,24 +420,36 @@ function dailyTotalsChanged(a, b) {
 // ever pulled back down.
 const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled'];
 
+// Cloud pushes run on their own serialized chain, separate from
+// storageWriteQueue, so a slow/jittery network request can't let a later
+// push's Firestore write land before (and get overwritten by) an earlier
+// one that started first but is still in flight.
+let cloudSyncQueue = Promise.resolve();
+
 async function saveAll(data) {
   // Always save to local first — this must never fail
   await saveLocal(data);
 
-  // Also push to cloud (skip the events array — too large, local-only)
+  // Push to cloud in the background (skip the events array — too large,
+  // local-only). This used to be awaited here, which meant every button tap
+  // sat blocked on a Firestore network round-trip before the +1 animation
+  // or the "Recorded…" toast could show — the on-page feedback should be
+  // instant, since the local save above already persisted the data safely.
   if (CLOUD_RELEVANT_KEYS.some(k => data[k] !== undefined)) {
-    try {
-      const localData = await getLocal();
-      await syncToCloud(data.dailyTotals ?? localData.dailyTotals, data.ticketLog ?? localData.ticketLog, {
-        masterLogHistory: data.masterLogHistory ?? localData.masterLogHistory,
-        ticketPayeeIssues: data.ticketPayeeIssues ?? localData.ticketPayeeIssues,
-        agentName: data.agentName ?? localData.agentName,
-        theme: data.theme ?? localData.theme,
-        countingEnabled: data.countingEnabled ?? localData.countingEnabled
-      });
-    } catch (e) {
-      console.warn('[ZTK Cloud] Cloud sync failed in saveAll, local data is safe:', e.message);
-    }
+    cloudSyncQueue = cloudSyncQueue.catch(() => {}).then(async () => {
+      try {
+        const localData = await getLocal();
+        await syncToCloud(data.dailyTotals ?? localData.dailyTotals, data.ticketLog ?? localData.ticketLog, {
+          masterLogHistory: data.masterLogHistory ?? localData.masterLogHistory,
+          ticketPayeeIssues: data.ticketPayeeIssues ?? localData.ticketPayeeIssues,
+          agentName: data.agentName ?? localData.agentName,
+          theme: data.theme ?? localData.theme,
+          countingEnabled: data.countingEnabled ?? localData.countingEnabled
+        });
+      } catch (e) {
+        console.warn('[ZTK Cloud] Cloud sync failed in saveAll, local data is safe:', e.message);
+      }
+    });
   }
 }
 
@@ -611,12 +632,18 @@ function getCurrentMonthKeys(dailyTotals, yearMonth) {
 // ── Stats aggregator ──────────────────────────
 
 async function getStats() {
-  // Best-effort pull from cloud — never let it break stats retrieval
-  try {
-    await pullFromCloudIfNeeded();
-  } catch (e) {
+  // Kick off a cloud pull in the background, but don't make the popup wait
+  // on it — this used to be awaited here, so opening the popup after the
+  // 10-minute cooldown had elapsed (e.g. after a while spent working with
+  // the popup closed) sat blocked on a full Firestore read (sometimes
+  // followed by a merge-back write) before any stats could render at all,
+  // showing a blank popup until the user closed and reopened it. Local
+  // storage already has everything this device has done, so return that
+  // immediately; a same-device reopen never needs the cloud data to show
+  // accurate history.
+  pullFromCloudIfNeeded().catch(e => {
     console.warn('[ZTK Cloud] Cloud pull failed during getStats, using local data:', e.message);
-  }
+  });
 
   const data = await getAll();
   const dt = data.dailyTotals;

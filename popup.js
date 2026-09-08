@@ -39,7 +39,16 @@ const THEMES = [
     { key: 'minimalist', name: 'Light / Minimalist', bg: '#ffffff', accent: '#3f3f46' },
     { key: 'vibrant', name: 'Vibrant / Colorful', bg: '#1e1638', accent: '#ff2e88' },
     { key: 'organic', name: 'Nature / Organic', bg: '#faf9f2', accent: '#4c7a3f' },
-    { key: 'vintage', name: 'Retro / Vintage', bg: '#2e2118', accent: '#d98e3e' }
+    { key: 'vintage', name: 'Retro / Vintage', bg: '#2e2118', accent: '#d98e3e' },
+    // Added from a user-supplied Real Time Colors palette set — kept
+    // alongside the 5 above rather than replacing any of them.
+    { key: 'blue-light', name: 'Ocean Blue (Light)', bg: '#fbfbfe', accent: '#2f27ce' },
+    { key: 'blue-dark', name: 'Ocean Blue (Dark)', bg: '#010104', accent: '#3a31d8' },
+    { key: 'emerald-forest', name: 'Emerald Forest', bg: '#050c08', accent: '#10b981' },
+    { key: 'crisp-light', name: 'Crisp Minimalist (Light)', bg: '#f8fafc', accent: '#6366f1' },
+    { key: 'crisp-dark', name: 'Crisp Minimalist (Dark)', bg: '#030507', accent: '#0d109b' },
+    { key: 'crimson-light', name: 'Crimson Obsidian (Light)', bg: '#ececee', accent: '#d72323' },
+    { key: 'crimson-dark', name: 'Crimson Obsidian (Dark)', bg: '#121214', accent: '#dc2626' }
 ];
 const THEME_NAMES = Object.fromEntries(THEMES.map(t => [t.key, t.name]));
 
@@ -83,17 +92,30 @@ const LEVEL_UP_MESSAGES = {
 };
 
 // ── Speed (Tickets Per Hour) ───────────────────
-// A day's TPH = that day's ticket total divided by the elapsed time between
-// its first and last logged ticket (floored at 15 minutes so a single quick
-// ticket, or a short burst, doesn't read as an absurd spike). Needs
-// ticketLog timestamps, so a day with a dailyTotals count but no matching
-// ticketLog entries (legacy data) simply has no computable speed.
-function computeDayTPH(ticketLog, dateStr, totalForDay) {
-    if (!totalForDay) return null;
-    const timestamps = (ticketLog || []).filter(e => e.date === dateStr).map(e => e.timestamp);
-    if (!timestamps.length) return null;
-    const hours = Math.max((Math.max(...timestamps) - Math.min(...timestamps)) / 3600000, 0.25);
-    return totalForDay / hours;
+// A day's speed record = the most tickets logged within any single
+// 60-minute window that day — a rolling window checked at every ticket's
+// own timestamp (two-pointer sliding-window-max), not fixed clock-hour
+// buckets, so a genuine burst like 6:23-7:23 counts as one full hour
+// instead of being split across two buckets and undercounted. This
+// replaces the old "day total / elapsed time between first and last
+// ticket" average, which rewarded having less idle time in your day almost
+// as much as it rewarded actually handling more tickets, and made the
+// number keep drifting down the longer a shift went on.
+// Mirrors background.js's computeDayPeakHourlyTickets — keep both in sync.
+function computeDayPeakHourlyTickets(ticketLog, dateStr) {
+    const timestamps = (ticketLog || [])
+        .filter(e => e.date === dateStr)
+        .map(e => e.timestamp)
+        .sort((a, b) => a - b);
+    if (!timestamps.length) return 0;
+
+    let maxCount = 0;
+    let left = 0;
+    for (let right = 0; right < timestamps.length; right++) {
+        while (timestamps[right] - timestamps[left] > 3600000) left++;
+        maxCount = Math.max(maxCount, right - left + 1);
+    }
+    return maxCount;
 }
 
 // Live speed shown next to the level rank/name — a ROLLING window (tickets
@@ -175,12 +197,29 @@ function hexToRgba(hex, alpha) {
 // legend dots, progress bars, and chart colors all read the
 // --red/--yellow/--blue/--green/--brown/--gray CSS variables, so setting
 // those re-colors the whole popup in one pass.
+// Reads a category CSS variable's value as declared by the active theme's
+// own stylesheet rule, ignoring any inline override this same code may have
+// set on a previous call — necessary because once an inline
+// custom-property is set, getComputedStyle keeps returning it forever
+// regardless of which data-theme is now active, which would otherwise make
+// every un-customized category color "stick" to whichever theme was active
+// the first time a color was ever touched instead of following new themes.
+function getThemeDefaultCategoryHex(varName) {
+    const root = document.documentElement;
+    const prevInline = root.style.getPropertyValue(`--${varName}`);
+    root.style.removeProperty(`--${varName}`);
+    const val = getComputedStyle(root).getPropertyValue(`--${varName}`).trim();
+    if (prevInline) root.style.setProperty(`--${varName}`, prevInline);
+    return val || null;
+}
+
 function applyCategoryColors(map) {
     const root = document.documentElement;
     CATEGORY_LIST.forEach((cat) => {
-        const hex = (map && map[cat]) || DEFAULT_CATEGORY_HEX[cat];
-        COLORS[cat] = { bg: hexToRgba(hex, 0.85), border: hex };
         const varName = CATEGORY_TO_CSS_VAR[cat];
+        const themeDefault = getThemeDefaultCategoryHex(varName) || DEFAULT_CATEGORY_HEX[cat];
+        const hex = (map && map[cat]) || themeDefault;
+        COLORS[cat] = { bg: hexToRgba(hex, 0.85), border: hex };
         root.style.setProperty(`--${varName}`, hex);
         root.style.setProperty(`--${varName}-glow`, hexToRgba(hex, 0.2));
     });
@@ -190,7 +229,8 @@ function applyCategoryColors(map) {
 function populateCategoryColorInputs(map) {
     document.querySelectorAll('.cat-color-input').forEach((input) => {
         const cat = input.getAttribute('data-cat');
-        input.value = (map && map[cat]) || DEFAULT_CATEGORY_HEX[cat];
+        const varName = CATEGORY_TO_CSS_VAR[cat];
+        input.value = (map && map[cat]) || getThemeDefaultCategoryHex(varName) || DEFAULT_CATEGORY_HEX[cat];
     });
 }
 
@@ -409,7 +449,14 @@ function applyTheme(theme) {
     document.documentElement.setAttribute('data-theme', key);
     if ($('theme-sublabel')) $('theme-sublabel').textContent = THEME_NAMES[key];
     updateThemeCurrentDot(key);
-    if (chartInstance) renderChart(); // re-render to update tooltip colors
+
+    // Chart.js bar colors are a JS-side snapshot, not a live CSS read — re-derive
+    // them (and re-populate the category-color swatches) from whichever theme
+    // just became active, so bars/swatches don't stay stuck on the previous theme.
+    chrome.storage.local.get(['categoryColors'], (res) => {
+        populateCategoryColorInputs(res.categoryColors || null);
+        applyCategoryColors(res.categoryColors || null); // also re-renders the chart
+    });
 }
 
 function updateThemeCurrentDot(key) {
@@ -1844,14 +1891,14 @@ function processLeaderboardRanks(dailyTotals) {
             date: `${parts[1]}/${parts[2]}/${parts[0].slice(-2)}`,
             rawDate: dateStr,
             score: sum,
-            tph: computeDayTPH(ticketLog, dateStr, sum),
+            tph: computeDayPeakHourlyTickets(ticketLog, dateStr),
             level: getLevelInfo(sum).current
         };
     });
 
     let sorted;
     if (currentRecordCategory === 'speed') {
-        sorted = daysArr.filter(d => d.tph != null && d.tph > 0).sort((a, b) => b.tph - a.tph);
+        sorted = daysArr.filter(d => d.tph > 0).sort((a, b) => b.tph - a.tph);
     } else if (currentRecordCategory === 'level') {
         sorted = [...daysArr].filter(d => d.score > 0).sort((a, b) => (b.level.level - a.level.level) || (b.score - a.score));
     } else {
@@ -1867,7 +1914,7 @@ function processLeaderboardRanks(dailyTotals) {
 
         if (entry) {
             if (currentRecordCategory === 'speed') {
-                if (valEl) { valEl.textContent = entry.tph.toFixed(1); valEl.style.color = ''; }
+                if (valEl) { valEl.textContent = entry.tph; valEl.style.color = ''; }
                 if (unitEl) unitEl.textContent = 'TPH';
             } else if (currentRecordCategory === 'level') {
                 if (valEl) { valEl.textContent = `Lv.${entry.level.level}`; valEl.style.color = entry.level.color; }
@@ -2282,7 +2329,7 @@ function renderTeamLeaderboard(period) {
     const periodLabel = isWeek ? 'Last Week' : 'Last Month';
     const championLabel = isWeek ? "Last Week's Champion" : "Last Month's Champion";
     const scoreUnit = isSpeed ? 'TPH' : 'tickets';
-    const fmtScore = (v) => isSpeed ? (v || 0).toFixed(1) : (v || 0);
+    const fmtScore = (v) => (v || 0);
 
     // Show loading state
     podium.innerHTML = '<div class="lb-loading">Loading leaderboard…</div>';

@@ -5,6 +5,16 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Zendesk Ticket Tracker</title>
+  <script>
+    // Applied the instant storage read resolves, straight from
+    // chrome.storage.local — not routed through the background service
+    // worker like the rest of popup.js's init does (GET_AUTH_STATE then
+    // GET_STATS), which was slow enough that the popup visibly flashed the
+    // default "moody" theme every time before switching to the saved one.
+    chrome.storage.local.get(['theme'], (res) => {
+      if (res && res.theme) document.documentElement.setAttribute('data-theme', res.theme);
+    });
+  </script>
   <link rel="stylesheet" href="popup.css" />
 </head>
 

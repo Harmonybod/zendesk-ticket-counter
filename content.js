@@ -91,7 +91,10 @@
     // the same 'theme' setting the popup's Appearance picker writes, so
     // legacy 'dark'/'light' values map onto their closest new theme instead
     // of falling through to an unstyled/mismatched attribute value.
-    const VALID_THEME_KEYS = ['moody', 'minimalist', 'vibrant', 'organic', 'vintage'];
+    const VALID_THEME_KEYS = [
+        'moody', 'minimalist', 'vibrant', 'organic', 'vintage',
+        'blue-light', 'blue-dark', 'emerald-forest', 'crisp-light', 'crisp-dark', 'crimson-light', 'crimson-dark'
+    ];
     function normalizeThemeKey(theme) {
         if (theme === 'light') return 'minimalist';
         if (VALID_THEME_KEYS.includes(theme)) return theme;

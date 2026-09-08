@@ -1,6 +1,16 @@
 <!doctype html>
-<html lang="en" data-theme="moody">
+<html lang="en" data-theme="classic">
 <head>
+  <script>
+    // Applied before any CSS paints, straight from localStorage, so a
+    // returning visitor doesn't see a flash of the default theme first.
+    (function () {
+      try {
+        var t = localStorage.getItem('ttDashboardTheme');
+        if (t) document.documentElement.setAttribute('data-theme', t);
+      } catch (e) {}
+    })();
+  </script>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <title>Ticket Tracker Dashboard</title>
@@ -45,7 +55,10 @@
           <span class="user-name" id="user-name"></span>
         </div>
       </div>
-      <button id="signout-btn" class="btn-signout">Sign out</button>
+      <div class="header-actions">
+        <button id="theme-btn" class="btn-theme" title="Appearance">🎨</button>
+        <button id="signout-btn" class="btn-signout">Sign out</button>
+      </div>
     </header>
 
     <nav class="range-nav">
@@ -143,6 +156,17 @@
     <footer class="footer-note">
       Synced from your Chrome extension account — refresh to pull the latest data.
     </footer>
+  </div>
+
+  <!-- ── Appearance / Theme Picker Modal ── -->
+  <div class="theme-picker-overlay" id="theme-picker-modal" aria-hidden="true">
+    <div class="theme-picker-card">
+      <div class="theme-picker-header">
+        <span class="theme-picker-title">Appearance</span>
+        <button class="theme-picker-close" id="theme-picker-close" title="Close">✕</button>
+      </div>
+      <div class="theme-picker-list" id="theme-picker-list"></div>
+    </div>
   </div>
 
   <!-- ── Detailed Chart Modal ── -->

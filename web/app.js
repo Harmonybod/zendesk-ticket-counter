@@ -86,7 +86,11 @@ function fmtShortDateStr(dateStr) {
 }
 
 // ── Color Palette (matches the extension's "moody" theme) ────────────────
-const COLORS = {
+// Mutable — re-derived from the active theme's own --red/--yellow/etc. CSS
+// variables (see refreshCategoryColorsFromTheme) so chart bars/lines match
+// whichever theme is picked instead of staying frozen on the original
+// "classic" hues now that there's more than one theme to choose from.
+let COLORS = {
     open: { bg: 'rgba(255,107,107,0.75)', border: '#ff6b6b' },
     new: { bg: 'rgba(255,217,61,0.75)', border: '#ffd93d' },
     team: { bg: 'rgba(89,168,255,0.75)', border: '#59a8ff' },
@@ -95,6 +99,15 @@ const COLORS = {
     closed: { bg: 'rgba(154,154,154,0.75)', border: '#9a9a9a' }
 };
 const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+const CATEGORY_TO_CSS_VAR = { open: 'red', new: 'yellow', team: 'blue', compliance: 'green', escalation: 'brown', closed: 'gray' };
+
+function refreshCategoryColorsFromTheme() {
+    const cs = getComputedStyle(document.documentElement);
+    Object.entries(CATEGORY_TO_CSS_VAR).forEach(([cat, varName]) => {
+        const hex = (cs.getPropertyValue(`--${varName}`) || '').trim();
+        if (hex) COLORS[cat] = { bg: hexToRgba(hex, 0.75), border: hex };
+    });
+}
 
 function $(id) { return document.getElementById(id); }
 function emptyTotals() { return { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 }; }
@@ -340,6 +353,25 @@ function renderPayeeLegend(data) {
 
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
+// Reads the active theme's own CSS variables instead of hardcoding a single
+// dark palette — needed now that the Appearance picker can switch to a
+// light theme, where a white-based grid/tick/empty-state color would be
+// nearly invisible. The tooltip itself stays dark in every theme by design
+// (see --chart-tooltip-bg in styles.css), so its white title/body text
+// doesn't need to be theme-aware.
+function getThemeChartColors() {
+    const cs = getComputedStyle(document.documentElement);
+    const v = (name, fallback) => (cs.getPropertyValue(name) || '').trim() || fallback;
+    return {
+        gridColor: v('--chart-grid', 'rgba(255,255,255,0.05)'),
+        gridColorY: v('--chart-grid-y', 'rgba(255,255,255,0.07)'),
+        ticksColor: v('--chart-ticks', 'rgba(255,255,255,0.4)'),
+        tooltipBg: v('--chart-tooltip-bg', 'rgba(14,14,16,0.95)'),
+        tooltipBorder: v('--border-h', 'rgba(255,255,255,0.14)'),
+        emptyColor: v('--text-3', 'rgba(236,236,236,0.32)')
+    };
+}
+
 function renderChart() {
     if (!userData) return;
     const ctx = $('main-chart').getContext('2d');
@@ -347,9 +379,11 @@ function renderChart() {
 
     if (chartInstance) { chartInstance.destroy(); chartInstance = null; }
 
+    const { gridColor, gridColorY, ticksColor, tooltipBg, tooltipBorder, emptyColor } = getThemeChartColors();
+
     if (!data) {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.fillStyle = 'rgba(236,236,236,0.32)';
+        ctx.fillStyle = emptyColor;
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText('No data for this period', ctx.canvas.width / 2, ctx.canvas.height / 2);
@@ -369,8 +403,8 @@ function renderChart() {
                 // own built-in legend — no need to render both.
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(14,14,16,0.95)',
-                    borderColor: 'rgba(255,255,255,0.14)',
+                    backgroundColor: tooltipBg,
+                    borderColor: tooltipBorder,
                     borderWidth: 1,
                     titleColor: 'rgba(255,255,255,0.7)',
                     bodyColor: '#fff',
@@ -383,14 +417,14 @@ function renderChart() {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
-                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10, family: 'Inter' } },
+                    grid: { color: gridColor, drawBorder: false },
+                    ticks: { color: ticksColor, font: { size: 10, family: 'Inter' } },
                     border: { display: false }
                 },
                 y: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(255,255,255,0.07)', drawBorder: false },
-                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10, family: 'Inter' }, stepSize: 1, precision: 0 },
+                    grid: { color: gridColorY, drawBorder: false },
+                    ticks: { color: ticksColor, font: { size: 10, family: 'Inter' }, stepSize: 1, precision: 0 },
                     border: { display: false }
                 }
             }
@@ -420,7 +454,7 @@ function renderLeaderboard(rows, totalField, isWeek, isSpeed) {
                 ? `<img class="leaderboard-avatar" src="${r.photoUrl}" alt="" referrerpolicy="no-referrer" />`
                 : `<div class="leaderboard-avatar"></div>`}
             <span class="leaderboard-name">${escapeHtml(r.displayName || r.email || 'Agent')}</span>
-            <span class="leaderboard-total">${isSpeed ? (r[totalField] || 0).toFixed(1) + ' TPH' : (r[totalField] || 0)}</span>
+            <span class="leaderboard-total">${isSpeed ? (r[totalField] || 0) + ' TPH' : (r[totalField] || 0)}</span>
         </div>
     `).join('');
 }
@@ -482,6 +516,69 @@ document.querySelectorAll('.chart-view-btn[data-view]').forEach(btn => {
         renderChart();
     });
 });
+
+// ── Appearance / Theme Picker ────────────────────────────────────────────
+// First theme system this dashboard has ever had — "classic" (the bg/accent
+// values below) is the look every existing visitor already sees, kept as
+// the default so nobody's view changes unless they open this picker.
+const THEMES = [
+    { key: 'classic', name: 'Classic Dark', bg: '#171717', accent: '#10a37f' },
+    { key: 'blue-light', name: 'Ocean Blue (Light)', bg: '#fbfbfe', accent: '#2f27ce' },
+    { key: 'blue-dark', name: 'Ocean Blue (Dark)', bg: '#010104', accent: '#3a31d8' },
+    { key: 'emerald-forest', name: 'Emerald Forest', bg: '#050c08', accent: '#10b981' },
+    { key: 'crisp-light', name: 'Crisp Minimalist (Light)', bg: '#f8fafc', accent: '#6366f1' },
+    { key: 'crisp-dark', name: 'Crisp Minimalist (Dark)', bg: '#030507', accent: '#0d109b' },
+    { key: 'crimson-light', name: 'Crimson Obsidian (Light)', bg: '#ececee', accent: '#d72323' },
+    { key: 'crimson-dark', name: 'Crimson Obsidian (Dark)', bg: '#121214', accent: '#dc2626' }
+];
+const THEME_STORAGE_KEY = 'ttDashboardTheme';
+
+function applyTheme(key) {
+    document.documentElement.setAttribute('data-theme', key);
+    try { localStorage.setItem(THEME_STORAGE_KEY, key); } catch (e) {}
+    refreshCategoryColorsFromTheme();
+    if (chartInstance) renderChart();
+    if (detailChartInstance) loadDetailChart();
+}
+
+function renderThemeList() {
+    const active = document.documentElement.getAttribute('data-theme') || 'classic';
+    $('theme-picker-list').innerHTML = THEMES.map(t => `
+        <div class="theme-row${t.key === active ? ' selected' : ''}" data-theme-key="${t.key}">
+            <span class="theme-swatch" style="background: linear-gradient(135deg, ${t.bg}, ${t.accent});"></span>
+            <span class="theme-row-name">${t.name}</span>
+            <span class="theme-row-check">${t.key === active ? '✓' : ''}</span>
+        </div>
+    `).join('');
+    $('theme-picker-list').querySelectorAll('.theme-row').forEach(row => {
+        row.addEventListener('click', () => {
+            applyTheme(row.getAttribute('data-theme-key'));
+            renderThemeList();
+        });
+    });
+}
+
+if ($('theme-btn')) {
+    $('theme-btn').addEventListener('click', () => {
+        renderThemeList();
+        $('theme-picker-modal').classList.add('open');
+        $('theme-picker-modal').setAttribute('aria-hidden', 'false');
+    });
+}
+function closeThemeModal() {
+    $('theme-picker-modal').classList.remove('open');
+    $('theme-picker-modal').setAttribute('aria-hidden', 'true');
+}
+if ($('theme-picker-close')) $('theme-picker-close').addEventListener('click', closeThemeModal);
+if ($('theme-picker-modal')) {
+    $('theme-picker-modal').addEventListener('click', (e) => {
+        if (e.target === $('theme-picker-modal')) closeThemeModal();
+    });
+}
+
+// Apply whatever the inline <head> script already set on <html> (or the
+// default) to COLORS right away, before the first chart ever renders.
+refreshCategoryColorsFromTheme();
 
 // ── Detailed Chart Modal (Number of Tickets / Payee Issue Types) ──────────
 // Client-side equivalent of the extension's background.js getDetailedStats
@@ -603,9 +700,11 @@ function renderDetailChart(response) {
     $('detail-legend').style.display = isPayee ? 'none' : '';
     $('detail-payee-legend-row').style.display = isPayee ? 'flex' : 'none';
 
+    const { gridColor, gridColorY, ticksColor, tooltipBg, tooltipBorder, emptyColor } = getThemeChartColors();
+
     const noData = (msg) => {
         ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
-        ctx.fillStyle = 'rgba(236,236,236,0.32)';
+        ctx.fillStyle = emptyColor;
         ctx.font = '12px Inter, system-ui, sans-serif';
         ctx.textAlign = 'center';
         ctx.fillText(msg, ctx.canvas.width / 2, ctx.canvas.height / 2);
@@ -680,8 +779,8 @@ function renderDetailChart(response) {
             plugins: {
                 legend: { display: false },
                 tooltip: {
-                    backgroundColor: 'rgba(14,14,16,0.95)',
-                    borderColor: 'rgba(255,255,255,0.14)',
+                    backgroundColor: tooltipBg,
+                    borderColor: tooltipBorder,
                     borderWidth: 1,
                     titleColor: 'rgba(255,255,255,0.7)',
                     bodyColor: '#fff',
@@ -691,9 +790,9 @@ function renderDetailChart(response) {
             },
             scales: {
                 x: {
-                    grid: { color: 'rgba(255,255,255,0.05)', drawBorder: false },
+                    grid: { color: gridColor, drawBorder: false },
                     ticks: {
-                        color: 'rgba(255,255,255,0.4)', font: { size: 9, family: 'Inter' },
+                        color: ticksColor, font: { size: 9, family: 'Inter' },
                         maxRotation: detailRange === 'today' ? 0 : 45, autoSkip: true,
                         maxTicksLimit: detailRange === 'today' ? 12 : 15
                     },
@@ -701,8 +800,8 @@ function renderDetailChart(response) {
                 },
                 y: {
                     beginAtZero: true,
-                    grid: { color: 'rgba(255,255,255,0.07)', drawBorder: false },
-                    ticks: { color: 'rgba(255,255,255,0.4)', font: { size: 10, family: 'Inter' }, stepSize: 1, precision: 0 },
+                    grid: { color: gridColorY, drawBorder: false },
+                    ticks: { color: ticksColor, font: { size: 10, family: 'Inter' }, stepSize: 1, precision: 0 },
                     border: { display: false }
                 }
             }
