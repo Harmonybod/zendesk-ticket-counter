@@ -96,6 +96,22 @@ function computeDayTPH(ticketLog, dateStr, totalForDay) {
     return totalForDay / hours;
 }
 
+// Live speed shown next to the level rank/name — a ROLLING window (tickets
+// in the last `windowMinutes`), not a whole-day average. A whole-day
+// average only ever trends toward one number and more or less sits there;
+// this instead reflects actual recent pace, rising during a burst and
+// decaying back toward 0 once activity stops, the same way it's
+// recomputed on a timer (see the setInterval near init) so it keeps
+// changing even while the popup just sits open.
+function computeRecentTPH(ticketLog, dateStr, windowMinutes) {
+    const cutoff = Date.now() - windowMinutes * 60000;
+    const entries = (ticketLog || []).filter(e => e.date === dateStr && e.timestamp >= cutoff);
+    if (!entries.length) return 0;
+    const earliest = Math.min(...entries.map(e => e.timestamp));
+    const elapsedHours = Math.max((Date.now() - earliest) / 3600000, 5 / 60); // floor at 5 minutes
+    return entries.length / elapsedHours;
+}
+
 function getLevelInfo(totalCount) {
     let current = LEVELS[0];
     let next = null;
@@ -682,16 +698,25 @@ function renderLevelSection() {
     $('level-progress-fill').style.background = current.color;
     $('level-count').textContent = next ? `${total} / ${next.min}` : `${total} (maxed)`;
 
-    // Live TPH — recalculated every render, so it climbs/settles throughout
-    // the day as more tickets land and more time passes (unlike the frozen,
-    // once-the-day-is-over speed *record* on the all-time leaderboard).
-    if ($('level-speed')) {
-        const tph = computeDayTPH(stats.ticketLog, stats.todayKey || fmtDateKey(new Date()), total);
-        $('level-speed').textContent = tph != null ? `⚡ ${tph.toFixed(1)} TPH` : '';
-    }
+    updateLiveSpeedDisplay();
 
     checkLevelUp(current.level);
 }
+
+// Recent-pace TPH (last 30 minutes), shown next to the level rank/name.
+// Called on every stats render AND on a timer (see setInterval below) so
+// it keeps ticking down toward 0 even if the popup is just left open with
+// no new tickets coming in — not just frozen at whatever it read once.
+const LIVE_SPEED_WINDOW_MINUTES = 30;
+
+function updateLiveSpeedDisplay() {
+    if (!stats || !$('level-speed')) return;
+    const dateKeyToday = stats.todayKey || fmtDateKey(new Date());
+    const tph = computeRecentTPH(stats.ticketLog, dateKeyToday, LIVE_SPEED_WINDOW_MINUTES);
+    $('level-speed').textContent = tph > 0 ? `⚡ ${tph.toFixed(1)} TPH` : '';
+}
+
+setInterval(updateLiveSpeedDisplay, 20000);
 
 function checkLevelUp(currentLevel) {
     const todayKey = fmtDateKey(new Date());
