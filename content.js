@@ -300,18 +300,32 @@
         btn.style.setProperty('--fx-progress', progress.toFixed(3));
     }
 
+    // Updates each button's level FX stage *and* its count badge/daily-total
+    // (the "Widget Counting" setting) off the same single dailyTotals read.
     function refreshButtonFxAll() {
         const overlay = document.getElementById(OVERLAY_ID);
         if (!overlay || !chrome.storage || !chrome.storage.local) return;
         chrome.storage.local.get(['dailyTotals'], (res) => {
             if (chrome.runtime.lastError) return;
             const todayTotals = (res.dailyTotals && res.dailyTotals[localDateKey(new Date())]) || {};
+            let dayTotal = 0;
             overlay.querySelectorAll('.zd-btn[data-type]').forEach(btn => {
                 const type = btn.getAttribute('data-type');
                 if (!BUTTON_FX_PROFILES[type]) return;
-                updateButtonFx(btn, type, todayTotals[type] || 0);
+                const count = todayTotals[type] || 0;
+                dayTotal += count;
+                updateButtonFx(btn, type, count);
+                updateButtonCountBadge(btn, count);
             });
+            const totalEl = overlay.querySelector('#zd-daily-total-num');
+            if (totalEl) totalEl.textContent = dayTotal;
         });
+    }
+
+    function updateButtonCountBadge(btn, count) {
+        const slot = btn.closest('.zd-btn-slot');
+        const badge = slot && slot.querySelector('.zd-count-badge');
+        if (badge) badge.textContent = count;
     }
 
     // ── Create Overlay DOM ────────────────────────
@@ -326,7 +340,7 @@
         overlayCreationInProgress = true;
 
         chrome.storage.local.get(
-            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'categoryColors', 'theme'],
+            ['tapMode', 'buttonShape', 'teamButtonEnabled', 'floaterLayout', 'categoryColors', 'theme', 'countingEnabled'],
             (settings) => {
                 overlayCreationInProgress = false;
                 if (chrome.runtime.lastError) return;
@@ -363,6 +377,7 @@
                     return `<span class="zd-btn-slot${circleCls}">
             <button class="zd-btn ${c.cls}${circleCls}" data-type="${c.type}" title="${c.title}"${styleAttr} data-fx-stage="glass">${label}${fxHtml}</button>
             <span class="fx-crown" aria-hidden="true">👑</span>
+            <span class="zd-count-badge" aria-hidden="true">0</span>
           </span>`;
                 }).join('');
 
@@ -372,6 +387,7 @@
                 overlay.id = OVERLAY_ID;
                 overlay.setAttribute('data-theme', themeKey);
                 if (isHorizontal) overlay.classList.add('horizontal-mode');
+                if (settings.countingEnabled === false) overlay.classList.add('counts-hidden');
 
                 overlay.innerHTML = `
       <div class="zd-drag-handle" title="Drag to Move · Double-click to flip layout">
@@ -383,6 +399,7 @@
         ${buttonsHtml}
         ${undoBtnHtml}
       </div>
+      <div id="zd-daily-total">Today: <span id="zd-daily-total-num">0</span></div>
     `;
 
                 document.body.appendChild(overlay);
@@ -435,7 +452,15 @@
 
                             if (response && response.success) {
                                 showPlusAnimation(button, type);
-                                if (response.totals) updateButtonFx(button, type, response.totals[type] || 0);
+                                if (response.totals) {
+                                    updateButtonFx(button, type, response.totals[type] || 0);
+                                    updateButtonCountBadge(button, response.totals[type] || 0);
+                                    const totalEl = document.getElementById('zd-daily-total-num');
+                                    if (totalEl) {
+                                        const dayTotal = Object.values(response.totals).reduce((s, v) => s + (v || 0), 0);
+                                        totalEl.textContent = dayTotal;
+                                    }
+                                }
 
                                 // Store to masterLogHistory & ticketPayeeIssues for Excel/Inspectors.
                                 // Routed through background.js's serialized write queue instead of
@@ -463,7 +488,7 @@
     if (chrome.storage && chrome.storage.onChanged) {
         chrome.storage.onChanged.addListener((changes, area) => {
             if (area !== 'local') return;
-            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors', 'theme'];
+            const watched = ['tapMode', 'buttonShape', 'teamButtonEnabled', 'categoryColors', 'theme', 'countingEnabled'];
             if (watched.some(k => k in changes)) {
                 const existing = document.getElementById(OVERLAY_ID);
                 if (existing) existing.remove();

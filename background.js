@@ -1122,12 +1122,19 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case 'GET_WEEKLY_LEADERBOARD':
           {
+            // On Mondays the popup asks to show "Last Week's Champion" —
+            // that needs last week's key, not the brand-new (nearly empty)
+            // current week. This previously always fell through to
+            // getCurrentWeekKey() regardless of msg.isMonday, so the
+            // Monday-only "champion" card never actually showed last week's
+            // data — it just showed the current week's still-empty totals.
+            const defaultWeekKey = msg.isMonday ? getLastWeekKey() : getCurrentWeekKey();
             const session = await getFirebaseSession(false);
             if (!session) {
-              sendResponse({ entries: [], weekKey: msg.weekKey || getCurrentWeekKey() });
+              sendResponse({ entries: [], weekKey: msg.weekKey || defaultWeekKey });
               break;
             }
-            const weekKey = msg.weekKey || getCurrentWeekKey();
+            const weekKey = msg.weekKey || defaultWeekKey;
             const entries = await readWeeklyLeaderboard(session.idToken, weekKey);
             sendResponse({ entries, weekKey });
           }

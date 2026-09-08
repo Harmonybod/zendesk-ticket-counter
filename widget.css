@@ -1014,6 +1014,59 @@
   font-size: 11px;
 }
 
+/* ── Count Badge + Daily Total ────────────────────────────────────────────
+   Gives the "Widget Counting" popup setting something real to control —
+   it used to only toggle a storage flag with no visible effect anywhere
+   on this overlay. Hidden entirely via .counts-hidden on the overlay. */
+.zd-count-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  min-width: 14px;
+  height: 14px;
+  padding: 0 3px;
+  border-radius: 8px;
+  background: rgba(15, 18, 35, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #fff;
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 12px;
+  text-align: center;
+  pointer-events: none;
+  z-index: 2;
+}
+
+.zd-btn.circle-mode ~ .zd-count-badge {
+  top: -4px;
+  right: -4px;
+  min-width: 12px;
+  height: 12px;
+  font-size: 8px;
+  line-height: 10px;
+}
+
+#zd-daily-total {
+  width: 100%;
+  text-align: center;
+  flex-shrink: 0;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.45);
+  letter-spacing: 0.3px;
+  padding-top: 2px;
+}
+
+#zd-daily-total span {
+  color: #f8fafc;
+  font-size: 11px;
+}
+
+#zd-tracker-overlay.counts-hidden .zd-count-badge,
+#zd-tracker-overlay.counts-hidden #zd-daily-total {
+  display: none;
+}
+
 /* ── Stage-driven intensity — ramps via --fx-progress (0-1) ─────────────── */
 .zd-btn[data-fx-stage="cracking"] .fx-crack {
   opacity: calc(var(--fx-progress, 0) * 0.85);
@@ -1139,6 +1192,13 @@
   border-bottom: none;
   padding-bottom: 0;
   margin-bottom: 0;
+}
+
+#zd-tracker-overlay.horizontal-mode #zd-daily-total {
+  width: auto;
+  flex-shrink: 0;
+  padding-top: 0;
+  margin-left: 4px;
 }
 
 #zd-tracker-overlay.horizontal-mode .zd-buttons {
