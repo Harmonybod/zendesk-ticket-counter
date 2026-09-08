@@ -497,15 +497,19 @@
       </div>
     </div>
 
-    <!-- ── Weekly Team Leaderboard ── -->
+    <!-- ── Team Leaderboard ── -->
     <div class="section-header-bar">
       <h3 class="section-header-title">
         <span class="icon icon-warning"><svg><use href="#icon-users"/></svg></span>
-        Weekly Team Leaderboard
+        Team Leaderboard
       </h3>
     </div>
     <div class="section-box" id="weekly-leaderboard-box">
-      <div class="weekly-lb-week-label" id="weekly-lb-week-label">This Week</div>
+      <div class="chart-view-toggle">
+        <button class="chart-view-btn active" id="lb-period-week" data-lb-period="week">Week</button>
+        <button class="chart-view-btn" id="lb-period-month" data-lb-period="month">Month</button>
+      </div>
+      <div class="weekly-lb-week-label" id="weekly-lb-week-label">Last Week</div>
       <!-- Top 3 Podium -->
       <div class="weekly-lb-podium" id="weekly-lb-podium">
         <div class="lb-loading">Loading leaderboard…</div>

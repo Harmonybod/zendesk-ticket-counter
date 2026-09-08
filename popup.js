@@ -348,7 +348,7 @@ function loadStats(callback) {
             applyTheme(stats.theme);
             applySettingsUI();
             renderPremiumAnalytics();
-            renderWeeklyLeaderboard();
+            renderTeamLeaderboard(currentLbPeriod);
             if (callback) callback();
         });
     } else {
@@ -2073,40 +2073,47 @@ if ($('backup-import-file')) {
     });
 }
 
-// ── Weekly Cross-User Leaderboard ─────────────────────────────────────────
-function renderWeeklyLeaderboard() {
+// ── Team Cross-User Leaderboard (Week / Month) ────────────────────────────
+// Always shows the last *completed* period, never the in-progress current
+// one — a week/month in progress would make whoever's synced the most
+// tickets SO FAR look like the runaway leader, when most people just
+// haven't had the rest of their week/month counted yet. A finished
+// period's total is final and stays displayed for the entire next one,
+// then rolls over once that period itself ends.
+let currentLbPeriod = 'week';
+
+function renderTeamLeaderboard(period) {
+    currentLbPeriod = period || currentLbPeriod;
     const podium = $('weekly-lb-podium');
-    const weekLabelEl = $('weekly-lb-week-label');
+    const periodLabelEl = $('weekly-lb-week-label');
     const moreBtn = $('weekly-lb-more-btn');
     const fullList = $('weekly-lb-full');
     if (!podium) return;
 
-    // Today's day of week — 1 = Monday
-    const today = new Date();
-    const isMonday = today.getDay() === 1;
+    const isWeek = currentLbPeriod === 'week';
+    const totalField = isWeek ? 'weekTotal' : 'monthTotal';
+    const action = isWeek ? 'GET_WEEKLY_LEADERBOARD' : 'GET_MONTHLY_LEADERBOARD';
+    const periodLabel = isWeek ? 'Last Week' : 'Last Month';
+    const championLabel = isWeek ? "Last Week's Champion" : "Last Month's Champion";
 
     // Show loading state
     podium.innerHTML = '<div class="lb-loading">Loading leaderboard…</div>';
     if (moreBtn) moreBtn.style.display = 'none';
     if (fullList) { fullList.innerHTML = ''; fullList.style.display = 'none'; }
+    if (periodLabelEl) periodLabelEl.textContent = periodLabel;
 
     chrome.runtime.sendMessage(
-        { action: 'GET_WEEKLY_LEADERBOARD', isMonday },
+        { action },
         (response) => {
             if (chrome.runtime.lastError || !response) {
                 podium.innerHTML = '<div class="lb-empty-msg">Could not load leaderboard.</div>';
                 return;
             }
 
-            const entries = (response.entries || []).sort((a, b) => b.weekTotal - a.weekTotal);
-
-            // Update week label
-            if (weekLabelEl) {
-                weekLabelEl.textContent = isMonday ? "Last Week's Champion" : 'This Week';
-            }
+            const entries = (response.entries || []).sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
 
             if (entries.length === 0) {
-                podium.innerHTML = '<div class="lb-empty-msg">No data yet for this week. Complete a sync to appear here!</div>';
+                podium.innerHTML = `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
                 return;
             }
 
@@ -2123,10 +2130,11 @@ function renderWeeklyLeaderboard() {
             podium.innerHTML = '';
             top3.forEach((user, i) => {
                 const meta = rankMeta[i];
-                const isCrowned = isMonday && i === 0;
+                const isChampion = i === 0;
+                const score = user[totalField] || 0;
 
                 const card = document.createElement('div');
-                card.className = `lb-card lb-rank-${i + 1}${isCrowned ? ' lb-crowned' : ''}`;
+                card.className = `lb-card lb-rank-${i + 1}${isChampion ? ' lb-crowned' : ''}`;
 
                 // Avatar: try photo URL, fallback to initial
                 const avatarHtml = user.photoUrl
@@ -2142,8 +2150,8 @@ function renderWeeklyLeaderboard() {
                     ${avatarHtml}
                     <div class="lb-name">${displayName}</div>
                     <div class="lb-email-small">${emailShort}</div>
-                    <div class="lb-score">${user.weekTotal} <span>tickets</span></div>
-                    ${isCrowned ? '<div class="lb-winner-tag">🏆 Last Week\'s Champion</div>' : ''}
+                    <div class="lb-score">${score} <span>tickets</span></div>
+                    ${isChampion ? `<div class="lb-winner-tag">🏆 ${championLabel}</div>` : ''}
                 `;
                 podium.appendChild(card);
             });
@@ -2160,7 +2168,7 @@ function renderWeeklyLeaderboard() {
                             <span class="lb-row-rank">#${i + 4}</span>
                             <span class="lb-row-name">${name}</span>
                             <span class="lb-row-email">${u.email || ''}</span>
-                            <span class="lb-row-score">${u.weekTotal}</span>
+                            <span class="lb-row-score">${u[totalField] || 0}</span>
                         </div>
                     `;
                 }).join('');
@@ -2182,6 +2190,14 @@ function renderWeeklyLeaderboard() {
         }
     );
 }
+
+document.querySelectorAll('[data-lb-period]').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-lb-period]').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        renderTeamLeaderboard(btn.dataset.lbPeriod);
+    });
+});
 
 // ── Shift Config Inputs Auto-Save ─────────────────────────────────────────
 ['shift-type-input', 'shift-start-input', 'shift-end-input', 'shift-remarks-input'].forEach(id => {

@@ -501,3 +501,106 @@ async function readWeeklyLeaderboard(idToken, weekKey) {
     };
   });
 }
+
+// ── Monthly Leaderboard Helpers ─────────────────────────────────────────────
+// Same shape/mechanics as the weekly leaderboard above, one calendar-month
+// granularity up. Kept as separate functions/collection (monthlyLeaderboard)
+// rather than parameterizing the weekly ones, since the key format and
+// Firestore path differ enough that sharing code would need as much
+// branching as just writing it twice — this stays simpler to read.
+
+/**
+ * Get the current calendar month's key.
+ * @returns {string} Month key like "2026-09"
+ */
+function getCurrentMonthKey() {
+  const now = new Date();
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Get last calendar month's key (handles the January -> December/year
+ * rollover correctly via Date's own month-overflow normalization).
+ * @returns {string} Month key like "2026-08"
+ */
+function getLastMonthKey() {
+  const now = new Date();
+  const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+  return `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/**
+ * Write user's monthly total to the shared leaderboard.
+ * @param {string} uid - Firebase user ID
+ * @param {string} idToken - Firebase ID token
+ * @param {string} monthKey - Month key like "2026-09"
+ * @param {string} email - User email
+ * @param {string} displayName - User display name
+ * @param {string} photoUrl - User profile photo URL
+ * @param {number} monthTotal - Total tickets for the month
+ */
+async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displayName, photoUrl, monthTotal) {
+  const url = `${FIRESTORE_BASE}/monthlyLeaderboard/${monthKey}/users/${encodeURIComponent(uid)}`;
+
+  const body = {
+    fields: {
+      email: { stringValue: email || '' },
+      displayName: { stringValue: displayName || email || '' },
+      photoUrl: { stringValue: photoUrl || '' },
+      monthTotal: { integerValue: String(monthTotal) },
+      monthKey: { stringValue: monthKey },
+      lastUpdated: { integerValue: String(Date.now()) }
+    }
+  };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+
+  const response = await fetch(url, {
+    method: 'PATCH',
+    headers,
+    body: JSON.stringify(body)
+  });
+
+  if (!response.ok) {
+    throw new Error(`Monthly leaderboard write failed (${response.status})`);
+  }
+
+  return true;
+}
+
+/**
+ * Read all users' entries for a given month.
+ * @param {string} idToken - Firebase ID token
+ * @param {string} monthKey - Month key like "2026-09"
+ * @returns {Array} Array of user entries
+ */
+async function readMonthlyLeaderboard(idToken, monthKey) {
+  const url = `${FIRESTORE_BASE}/monthlyLeaderboard/${monthKey}/users`;
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+
+  const response = await fetch(url, {
+    method: 'GET',
+    headers
+  });
+
+  if (response.status === 404 || response.status === 400) return [];
+  if (!response.ok) return [];
+
+  const data = await response.json();
+  if (!data.documents) return [];
+
+  return data.documents.map(doc => {
+    const f = doc.fields || {};
+    return {
+      uid: doc.name.split('/').pop(),
+      email: f.email?.stringValue || '',
+      displayName: f.displayName?.stringValue || '',
+      photoUrl: f.photoUrl?.stringValue || '',
+      monthTotal: parseInt(f.monthTotal?.integerValue || '0', 10),
+      monthKey: f.monthKey?.stringValue || monthKey
+    };
+  });
+}

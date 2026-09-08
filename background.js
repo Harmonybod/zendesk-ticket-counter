@@ -93,10 +93,10 @@ function getWeeklyTotal(dailyTotals) {
   const monday = new Date(now);
   monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
   monday.setHours(0, 0, 0, 0);
-  
+
   let total = 0;
   const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
-  
+
   for (let i = 0; i < 7; i++) {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
@@ -107,7 +107,28 @@ function getWeeklyTotal(dailyTotals) {
       }
     }
   }
-  
+
+  return total;
+}
+
+function getMonthlyTotal(dailyTotals) {
+  const now = new Date();
+  const year = now.getFullYear();
+  const month = now.getMonth();
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+
+  let total = 0;
+  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+
+  for (let d = 1; d <= daysInMonth; d++) {
+    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+    if (dailyTotals[key]) {
+      for (const t of ALL_TYPES) {
+        total += dailyTotals[key][t] ?? 0;
+      }
+    }
+  }
+
   return total;
 }
 
@@ -128,7 +149,12 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
     await firestoreWrite(session.uid, dailyTotals, ticketLog, settings, session.idToken);
     
-    // Also write to weekly leaderboard
+    // Also write to the weekly + monthly leaderboards. These write the
+    // CURRENT (in-progress) period's running total — that's intentional:
+    // by the time that period ends, its document holds the final total,
+    // and the leaderboard always *reads* the last completed period (see
+    // GET_WEEKLY_LEADERBOARD / GET_MONTHLY_LEADERBOARD below), so nobody
+    // sees a still-in-progress total inflate their apparent rank mid-week.
     const weekKey = getCurrentWeekKey();
     const weekTotal = getWeeklyTotal(dailyTotals);
     await writeWeeklyLeaderboardEntry(
@@ -140,8 +166,20 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
       session.photoUrl,
       weekTotal
     );
-    
-    console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly leaderboard');
+
+    const monthKey = getCurrentMonthKey();
+    const monthTotal = getMonthlyTotal(dailyTotals);
+    await writeMonthlyLeaderboardEntry(
+      session.uid,
+      session.idToken,
+      monthKey,
+      session.email,
+      settings.agentName || session.displayName || session.email,
+      session.photoUrl,
+      monthTotal
+    );
+
+    console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly/monthly leaderboards');
     return true;
   } catch (e) {
     console.error('[ZTK Cloud] ✗ Failed to push to Firestore:', e.message);
@@ -1122,21 +1160,34 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
           break;
         case 'GET_WEEKLY_LEADERBOARD':
           {
-            // On Mondays the popup asks to show "Last Week's Champion" —
-            // that needs last week's key, not the brand-new (nearly empty)
-            // current week. This previously always fell through to
-            // getCurrentWeekKey() regardless of msg.isMonday, so the
-            // Monday-only "champion" card never actually showed last week's
-            // data — it just showed the current week's still-empty totals.
-            const defaultWeekKey = msg.isMonday ? getLastWeekKey() : getCurrentWeekKey();
+            // Always the last *completed* week, never the in-progress
+            // current one — otherwise whoever happened to sync the most
+            // tickets in the first day or two of a brand-new week looks
+            // like the runaway leader with a week's worth of totals still
+            // to come. A finished week's total is stable for the entire
+            // following week, then rolls over once that week itself ends.
+            const weekKey = msg.weekKey || getLastWeekKey();
             const session = await getFirebaseSession(false);
             if (!session) {
-              sendResponse({ entries: [], weekKey: msg.weekKey || defaultWeekKey });
+              sendResponse({ entries: [], weekKey });
               break;
             }
-            const weekKey = msg.weekKey || defaultWeekKey;
             const entries = await readWeeklyLeaderboard(session.idToken, weekKey);
             sendResponse({ entries, weekKey });
+          }
+          break;
+        case 'GET_MONTHLY_LEADERBOARD':
+          {
+            // Same "always the last completed period" rule as the weekly
+            // board, one calendar-month granularity up.
+            const monthKey = msg.monthKey || getLastMonthKey();
+            const session = await getFirebaseSession(false);
+            if (!session) {
+              sendResponse({ entries: [], monthKey });
+              break;
+            }
+            const entries = await readMonthlyLeaderboard(session.idToken, monthKey);
+            sendResponse({ entries, monthKey });
           }
           break;
         case 'WIPE_DATA':
