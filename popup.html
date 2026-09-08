@@ -269,8 +269,10 @@
           <span class="mini-modal-title">Weekly Shift Schedule</span>
           <button class="mini-modal-close" id="weekly-shift-close" title="Close">✕</button>
         </div>
+        <p class="weekly-shift-modal-note">Group the days that share the same shift together, then add another shift for any day that's different.</p>
         <div class="mini-modal-body weekly-shift-body" id="weekly-shift-body"></div>
         <div class="mini-modal-footer">
+          <button class="btn-save weekly-shift-add-btn" id="weekly-shift-add-group">+ Add Shift</button>
           <button class="btn-save" id="weekly-shift-save">Save Schedule</button>
         </div>
       </div>
@@ -412,7 +414,8 @@
           <select id="shift-type-input">
             <option value="Day">Day Shift</option>
             <option value="Night">Night Shift</option>
-            <option value="Weekend">Weekend Shift</option>
+            <option value="Weekend Day">Weekend Day Shift</option>
+            <option value="Weekend Night">Weekend Night Shift</option>
           </select>
         </div>
       </div>
@@ -541,9 +544,10 @@
         <button class="chart-view-btn active" id="lb-period-week" data-lb-period="week">Week</button>
         <button class="chart-view-btn" id="lb-period-month" data-lb-period="month">Month</button>
       </div>
-      <div class="chart-view-toggle lb-category-toggle">
-        <button class="chart-view-btn active" data-lb-cat="tickets">🎫 Tickets</button>
-        <button class="chart-view-btn" data-lb-cat="speed">⚡ Speed</button>
+      <div class="lb-category-toggle">
+        <span class="lb-category-label">Rank by</span>
+        <button class="lb-cat-btn active" data-lb-cat="tickets">🎫 Tickets</button>
+        <button class="lb-cat-btn" data-lb-cat="speed">⚡ Speed</button>
       </div>
       <div class="weekly-lb-week-label" id="weekly-lb-week-label">Last Week</div>
       <!-- Top 3 Podium -->

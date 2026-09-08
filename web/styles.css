@@ -342,6 +342,51 @@ h1, h2 { font-weight: 700; }
   color: var(--text-1);
 }
 
+/* ── Team Leaderboard "Rank by" sub-toggle ──────────────────────────────────
+   Deliberately not styled like the primary Week/Month toggle above it —
+   smaller pills + a label + a left rule, so it reads as a secondary
+   refinement of the selected period, not a second, visually-identical
+   toggle that gets confused with the first. */
+.lb-category-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: -6px 0 14px 6px;
+  padding-left: 10px;
+  border-left: 2px solid var(--border);
+}
+
+.lb-category-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-3);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.lb-cat-btn {
+  border: 1px solid var(--border);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+}
+
+.lb-cat-btn:hover {
+  color: var(--text-1);
+  border-color: var(--border-h);
+}
+
+.lb-cat-btn.active {
+  background: var(--accent-dim);
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
 /* Bigger, standalone legend — the web dashboard has the room the popup
    doesn't, so these chips are sized for easy reading, not squeezed in. */
 .chart-legend {

@@ -2395,6 +2395,51 @@ body {
     padding: 6px 2px;
 }
 
+/* ── Team Leaderboard "Rank by" sub-toggle ──────────────────────────────────
+   Deliberately NOT styled like the primary Week/Month .chart-view-btn row
+   above it — smaller pills + a label + a left rule, so it reads as a
+   secondary refinement of whichever period is selected, not a second,
+   visually-identical toggle that gets confused with the first. */
+.lb-category-toggle {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin: -2px 0 12px 4px;
+    padding-left: 8px;
+    border-left: 2px solid var(--border);
+}
+
+.lb-category-label {
+    font-size: 9px;
+    font-weight: 700;
+    color: var(--text-3);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.lb-cat-btn {
+    border: 1px solid var(--border);
+    background: var(--bg-2);
+    color: var(--text-2);
+    font-size: 10px;
+    font-weight: 600;
+    padding: 4px 10px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background-color 0.15s, color 0.15s, border-color 0.15s;
+}
+
+.lb-cat-btn:hover {
+    color: var(--text-1);
+    border-color: var(--border-h);
+}
+
+.lb-cat-btn.active {
+    background: var(--accent-dim);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+
 .record-lbl {
     font-family: 'Inter', system-ui, sans-serif;
     font-size: 8px;
@@ -2942,31 +2987,115 @@ body {
   margin: 6px 2px 0;
 }
 
-.weekly-shift-row {
-  display: grid;
-  grid-template-columns: 34px 1fr 62px 62px;
-  align-items: center;
-  gap: 6px;
+/* ── Weekly Shift Groups ──────────────────────────────────────────────────
+   One block per shift, each covering whichever days the user assigns to
+   it — replaces the old one-row-per-day layout, which forced editing all
+   7 days even when most of them share the same shift. */
+#weekly-shift-modal .mini-modal {
+  width: 320px;
 }
 
-.weekly-shift-day {
-  font-size: 10.5px;
+.weekly-shift-modal-note {
+  font-size: 10px;
+  color: var(--text-3);
+  line-height: 1.4;
+  margin: 0;
+  padding: 10px 16px 0;
+}
+
+.shift-group {
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shift-group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.shift-group-title {
+  font-size: 11px;
   font-weight: 800;
   color: var(--text-2);
   text-transform: uppercase;
+  letter-spacing: 0.3px;
 }
 
-.weekly-shift-row select,
-.weekly-shift-row input[type="time"] {
+.shift-group-remove {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-3);
+  font-size: 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.shift-group-remove:hover {
+  color: var(--red);
+  border-color: var(--red);
+}
+
+.shift-group-days {
+  display: flex;
+  gap: 4px;
+}
+
+.shift-day-chip {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg-card);
+  color: var(--text-3);
+  font-size: 9.5px;
+  font-weight: 700;
+  padding: 5px 0;
+  border-radius: 6px;
+  cursor: pointer;
+  text-align: center;
+}
+
+.shift-day-chip:hover {
+  border-color: var(--border-h);
+  color: var(--text-1);
+}
+
+.shift-day-chip.active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+
+.shift-group-fields {
+  display: grid;
+  grid-template-columns: 1fr 62px 62px;
+  gap: 6px;
+}
+
+.shift-group-fields select,
+.shift-group-fields input[type="time"] {
   width: 100%;
   padding: 5px 4px;
   border: 1px solid var(--border);
-  background-color: var(--bg-2);
+  background-color: var(--bg-card);
   color: var(--text-1);
   border-radius: 6px;
   box-sizing: border-box;
   font-family: 'Inter', system-ui, sans-serif;
   font-size: 10px;
+}
+
+.weekly-shift-add-btn {
+  background: var(--bg-2);
 }
 
 .shift-settings-grid {

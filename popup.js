@@ -2399,25 +2399,106 @@ const WEEK_DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const DOW_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']; // Date.getDay() index
 let weeklyShiftConfigCache = null;
 
-function renderWeeklyShiftRows(config) {
+// Shift groups let the user assign a whole run of days (e.g. Mon–Fri) to
+// one shift in a single step, instead of configuring 7 rows one at a time.
+// A day belongs to at most one group — claiming it in one group silently
+// drops it from any other group it was in (see the day-chip click handler).
+const SHIFT_TYPES = ['Day', 'Night', 'Weekend Day', 'Weekend Night', 'Off'];
+let weeklyShiftGroupsDraft = [];
+
+// Migrates a legacy per-day flat config (from before shift groups existed)
+// into groups, so a user who already saved one doesn't lose it — days that
+// share an identical {type, start, end} collapse into one group.
+function migrateFlatShiftConfigToGroups(flatConfig) {
+    if (!flatConfig) return [];
+    const groups = [];
+    WEEK_DAYS.forEach(day => {
+        const c = flatConfig[day];
+        if (!c || !c.type) return;
+        const key = `${c.type}|${c.start || ''}|${c.end || ''}`;
+        let group = groups.find(g => g._key === key);
+        if (!group) {
+            group = { days: [], type: c.type, start: c.start || '', end: c.end || '', _key: key };
+            groups.push(group);
+        }
+        group.days.push(day);
+    });
+    groups.forEach(g => delete g._key);
+    return groups;
+}
+
+function flattenShiftGroups(groups) {
+    const flat = {};
+    (groups || []).forEach(g => {
+        if (!g.type) return;
+        g.days.forEach(day => {
+            flat[day] = { type: g.type, start: g.start || '', end: g.end || '' };
+        });
+    });
+    return flat;
+}
+
+function renderWeeklyShiftGroups() {
     const body = $('weekly-shift-body');
     if (!body) return;
-    body.innerHTML = WEEK_DAYS.map(day => {
-        const c = (config && config[day]) || {};
-        const type = c.type || 'Day';
-        return `
-        <div class="weekly-shift-row" data-day="${day}">
-            <span class="weekly-shift-day">${day}</span>
-            <select class="weekly-shift-type">
-                <option value="Day"${type === 'Day' ? ' selected' : ''}>Day</option>
-                <option value="Night"${type === 'Night' ? ' selected' : ''}>Night</option>
-                <option value="Weekend"${type === 'Weekend' ? ' selected' : ''}>Weekend</option>
-                <option value="Off"${type === 'Off' ? ' selected' : ''}>Off</option>
-            </select>
-            <input type="time" class="weekly-shift-start" value="${c.start || ''}" />
-            <input type="time" class="weekly-shift-end" value="${c.end || ''}" />
-        </div>`;
-    }).join('');
+    body.innerHTML = weeklyShiftGroupsDraft.map((g, gi) => `
+        <div class="shift-group" data-gi="${gi}">
+            <div class="shift-group-header">
+                <span class="shift-group-title">Shift ${gi + 1}</span>
+                <button type="button" class="shift-group-remove" data-remove-group="${gi}" title="Remove this shift">✕</button>
+            </div>
+            <div class="shift-group-days">
+                ${WEEK_DAYS.map(day => `
+                    <button type="button" class="shift-day-chip${g.days.includes(day) ? ' active' : ''}" data-gi="${gi}" data-day="${day}">${day[0]}${day[1]}</button>
+                `).join('')}
+            </div>
+            <div class="shift-group-fields">
+                <select class="shift-group-type" data-gi="${gi}">
+                    ${SHIFT_TYPES.map(t => `<option value="${t}"${g.type === t ? ' selected' : ''}>${t}</option>`).join('')}
+                </select>
+                <input type="time" class="shift-group-start" data-gi="${gi}" value="${g.start || ''}" />
+                <input type="time" class="shift-group-end" data-gi="${gi}" value="${g.end || ''}" />
+            </div>
+        </div>
+    `).join('');
+}
+
+// Event delegation on the (permanent) container — bound once, keeps working
+// across every re-render of its innerHTML above.
+const weeklyShiftBodyEl = $('weekly-shift-body');
+if (weeklyShiftBodyEl) {
+    weeklyShiftBodyEl.addEventListener('click', (e) => {
+        const dayBtn = e.target.closest('.shift-day-chip');
+        if (dayBtn) {
+            const gi = parseInt(dayBtn.dataset.gi, 10);
+            const day = dayBtn.dataset.day;
+            const wasInThisGroup = weeklyShiftGroupsDraft[gi].days.includes(day);
+            // A day can only belong to one shift — claiming it here removes
+            // it from every other group first.
+            weeklyShiftGroupsDraft.forEach(group => {
+                const idx = group.days.indexOf(day);
+                if (idx !== -1) group.days.splice(idx, 1);
+            });
+            if (!wasInThisGroup) weeklyShiftGroupsDraft[gi].days.push(day);
+            renderWeeklyShiftGroups();
+            return;
+        }
+        const removeBtn = e.target.closest('[data-remove-group]');
+        if (removeBtn) {
+            weeklyShiftGroupsDraft.splice(parseInt(removeBtn.dataset.removeGroup, 10), 1);
+            renderWeeklyShiftGroups();
+        }
+    });
+
+    weeklyShiftBodyEl.addEventListener('change', (e) => {
+        const gi = e.target.dataset.gi;
+        if (gi == null) return;
+        const g = weeklyShiftGroupsDraft[parseInt(gi, 10)];
+        if (!g) return;
+        if (e.target.classList.contains('shift-group-type')) g.type = e.target.value;
+        if (e.target.classList.contains('shift-group-start')) g.start = e.target.value;
+        if (e.target.classList.contains('shift-group-end')) g.end = e.target.value;
+    });
 }
 
 function closeWeeklyShiftModal() {
@@ -2427,26 +2508,35 @@ function closeWeeklyShiftModal() {
 
 if ($('open-weekly-shift-modal')) {
     $('open-weekly-shift-modal').addEventListener('click', () => {
-        renderWeeklyShiftRows(weeklyShiftConfigCache);
-        $('weekly-shift-modal').classList.add('open');
-        $('weekly-shift-modal').setAttribute('aria-hidden', 'false');
+        chrome.storage.local.get(['weeklyShiftGroups', 'weeklyShiftConfig'], (res) => {
+            if (res.weeklyShiftGroups && res.weeklyShiftGroups.length) {
+                weeklyShiftGroupsDraft = JSON.parse(JSON.stringify(res.weeklyShiftGroups));
+            } else {
+                weeklyShiftGroupsDraft = migrateFlatShiftConfigToGroups(res.weeklyShiftConfig);
+            }
+            if (!weeklyShiftGroupsDraft.length) {
+                weeklyShiftGroupsDraft = [{ days: [], type: 'Day', start: '', end: '' }];
+            }
+            renderWeeklyShiftGroups();
+            $('weekly-shift-modal').classList.add('open');
+            $('weekly-shift-modal').setAttribute('aria-hidden', 'false');
+        });
     });
 }
 if ($('weekly-shift-close')) $('weekly-shift-close').addEventListener('click', closeWeeklyShiftModal);
 
+if ($('weekly-shift-add-group')) {
+    $('weekly-shift-add-group').addEventListener('click', () => {
+        weeklyShiftGroupsDraft.push({ days: [], type: 'Day', start: '', end: '' });
+        renderWeeklyShiftGroups();
+    });
+}
+
 if ($('weekly-shift-save')) {
     $('weekly-shift-save').addEventListener('click', () => {
-        const config = {};
-        document.querySelectorAll('.weekly-shift-row').forEach(row => {
-            const day = row.getAttribute('data-day');
-            config[day] = {
-                type: row.querySelector('.weekly-shift-type').value,
-                start: row.querySelector('.weekly-shift-start').value,
-                end: row.querySelector('.weekly-shift-end').value
-            };
-        });
-        chrome.storage.local.set({ weeklyShiftConfig: config }, () => {
-            weeklyShiftConfigCache = config;
+        const flat = flattenShiftGroups(weeklyShiftGroupsDraft);
+        chrome.storage.local.set({ weeklyShiftGroups: weeklyShiftGroupsDraft, weeklyShiftConfig: flat }, () => {
+            weeklyShiftConfigCache = flat;
             applyTodaysWeeklyShiftIfNeeded();
             showToast('✓ Weekly shift schedule saved');
             closeWeeklyShiftModal();
