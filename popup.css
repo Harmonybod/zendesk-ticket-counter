@@ -1423,6 +1423,7 @@ body {
 /* ── Footer ──────────────────────────────────────────────────────────────── */
 .footer {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     justify-content: space-between;
     padding: 0 14px;
@@ -1431,6 +1432,8 @@ body {
 
 .export-group {
     display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
     gap: 6px;
 }
 
@@ -1481,6 +1484,18 @@ body {
 .export-xls-btn:hover {
     background-color: #1a5c38;
     border-color: #1a5c38;
+    color: #ffffff;
+}
+
+.export-slack-btn {
+    background-color: #4a154b;
+    border-color: #4a154b;
+    color: #ffffff;
+}
+
+.export-slack-btn:hover {
+    background-color: #350f36;
+    border-color: #350f36;
     color: #ffffff;
 }
 

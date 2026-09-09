@@ -184,6 +184,8 @@ function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
       ticketLogJson:   { stringValue: JSON.stringify(ticketLog || []) },
       masterLogHistoryJson: { stringValue: JSON.stringify(settings.masterLogHistory || []) },
       ticketPayeeIssuesJson: { stringValue: JSON.stringify(settings.ticketPayeeIssues || {}) },
+      shiftConfigJson: { stringValue: JSON.stringify(settings.shiftConfig || null) },
+      weeklyShiftConfigJson: { stringValue: JSON.stringify(settings.weeklyShiftConfig || null) },
       agentName: { stringValue: settings.agentName || '' },
       theme: { stringValue: settings.theme || 'dark' },
       countingEnabled: { booleanValue: settings.countingEnabled !== false },
@@ -197,7 +199,7 @@ function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
  */
 function fromFirestoreDoc(doc) {
   if (!doc || !doc.fields) {
-    return { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
+    return { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, shiftConfig: null, weeklyShiftConfig: null, agentName: '', theme: 'dark', countingEnabled: true, lastUpdated: 0 };
   }
 
   const f = doc.fields;
@@ -205,6 +207,8 @@ function fromFirestoreDoc(doc) {
   let ticketLog = [];
   let masterLogHistory = [];
   let ticketPayeeIssues = {};
+  let shiftConfig = null;
+  let weeklyShiftConfig = null;
 
   try {
     dailyTotals = JSON.parse(f.dailyTotalsJson?.stringValue || '{}');
@@ -230,11 +234,25 @@ function fromFirestoreDoc(doc) {
     console.warn('[ZTK Firebase] Failed to parse ticketPayeeIssues from Firestore:', e.message);
   }
 
+  try {
+    shiftConfig = JSON.parse(f.shiftConfigJson?.stringValue || 'null');
+  } catch (e) {
+    console.warn('[ZTK Firebase] Failed to parse shiftConfig from Firestore:', e.message);
+  }
+
+  try {
+    weeklyShiftConfig = JSON.parse(f.weeklyShiftConfigJson?.stringValue || 'null');
+  } catch (e) {
+    console.warn('[ZTK Firebase] Failed to parse weeklyShiftConfig from Firestore:', e.message);
+  }
+
   return {
     dailyTotals,
     ticketLog,
     masterLogHistory,
     ticketPayeeIssues,
+    shiftConfig,
+    weeklyShiftConfig,
     agentName: f.agentName?.stringValue || '',
     theme: f.theme?.stringValue || 'dark',
     countingEnabled: f.countingEnabled?.booleanValue !== false,

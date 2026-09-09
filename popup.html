@@ -223,6 +223,21 @@
           <span class="settings-sublabel" id="tg-status" style="margin-top:4px; display:block;"></span>
         </div>
 
+        <div class="settings-divider"></div>
+
+        <!-- Slack Daily Report Settings -->
+        <div class="settings-row">
+          <label class="settings-label">💬 Slack Daily Report</label>
+          <span class="settings-sublabel">Bot Token (from api.slack.com/apps)</span>
+          <input type="text" id="slack-token-input" placeholder="xoxb-..." style="width:100%; margin-top:4px;" />
+          <span class="settings-sublabel" style="display:block; margin-top:8px;">Boss's Slack Member ID</span>
+          <div class="settings-name-row" style="margin-top:4px;">
+            <input type="text" id="slack-user-id-input" placeholder="e.g. U0123ABC456" />
+            <button class="btn-save" id="save-slack-btn">Save</button>
+          </div>
+          <span class="settings-sublabel" id="slack-status" style="margin-top:4px; display:block;"></span>
+        </div>
+
       </div>
     </div>
 
@@ -493,6 +508,9 @@
         </button>
         <button class="footer-btn export-btn export-xls-btn" id="export-xls">
           <span class="footer-icon">⬇</span> XLSX
+        </button>
+        <button class="footer-btn export-btn export-slack-btn" id="send-slack-btn" title="Send today's report to your boss on Slack">
+          <span class="footer-icon">💬</span> Slack
         </button>
       </div>
     </footer>

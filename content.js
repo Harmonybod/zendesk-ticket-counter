@@ -302,7 +302,7 @@
         { level: 2, name: 'Initiate', min: 15, color: '#F1C40F' },
         { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF' },
         { level: 4, name: 'Adept', min: 45, color: '#1D8348' },
-        { level: 5, name: 'Elite', min: 60, color: '#AED6F1' },
+        { level: 5, name: 'Elite', min: 60, color: '#00B0F0' },
         { level: 6, name: 'Veteran', min: 70, color: '#2E86C1' },
         { level: 7, name: 'Master', min: 80, color: '#1B4F72' },
         { level: 8, name: 'Grandmaster', min: 90, color: '#922B21' },
@@ -468,8 +468,12 @@
                     const circleCls = isCircle ? ' circle-mode' : '';
                     const fxHtml = `<span class="zd-fx" aria-hidden="true">
               <span class="fx-glass"></span>
-              <span class="fx-crack"></span>
+              <span class="fx-crack fx-crack-1"></span>
+              <span class="fx-crack fx-crack-2"></span>
+              <span class="fx-crack fx-crack-3"></span>
+              <span class="fx-shatter"></span>
               <span class="fx-smoke"></span>
+              <span class="fx-smoke fx-smoke-2"></span>
               <span class="fx-fire"></span>
               <span class="fx-buzzer"></span>
             </span>`;
@@ -596,7 +600,7 @@
     }
 
     // ── Run Loop ──────────────────────────────────
-    setInterval(() => {
+    function runTick() {
         if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) {
             const deadOverlay = document.getElementById(OVERLAY_ID);
             if (deadOverlay) deadOverlay.remove();
@@ -605,6 +609,21 @@
         createOverlay();
         refreshOverlayDisplay();
         refreshButtonFxAll();
-    }, 1000);
+    }
+
+    setInterval(runTick, 1000);
+
+    // A Zendesk tab left open overnight (very normal — agents don't close
+    // their ticket queue at end of shift) can sit backgrounded/throttled by
+    // the browser for hours; its 1s interval above may not have ticked
+    // since before dailyTotals rolled over to a new day, so the buttons can
+    // still show yesterday's fire/smoke stage when the tab is looked at
+    // again this morning. Force an immediate refresh the moment the tab
+    // actually becomes visible/focused again, instead of waiting on a timer
+    // that was just throttled for hours.
+    document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible') runTick();
+    });
+    window.addEventListener('focus', runTick);
 
 })();

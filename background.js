@@ -32,7 +32,7 @@ let lastCloudSyncTime = 0;
 async function getLocal() {
   return new Promise((resolve) => {
     chrome.storage.local.get(
-      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId', 'shiftConfig', 'weeklyShiftConfig'],
+      ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'theme', 'tgToken', 'tgChatId', 'slackToken', 'slackUserId', 'shiftConfig', 'weeklyShiftConfig'],
       (result) => {
         if (chrome.runtime.lastError) {
           console.error('[ZTK] Failed to read local storage:', chrome.runtime.lastError.message);
@@ -47,6 +47,8 @@ async function getLocal() {
             theme: 'moody',
             tgToken: '',
             tgChatId: '',
+            slackToken: '',
+            slackUserId: '',
             shiftConfig: null,
             weeklyShiftConfig: null
           });
@@ -63,6 +65,8 @@ async function getLocal() {
           theme: result.theme ?? 'moody',
           tgToken: result.tgToken ?? '',
           tgChatId: result.tgChatId ?? '',
+          slackToken: result.slackToken ?? '',
+          slackUserId: result.slackUserId ?? '',
           shiftConfig: result.shiftConfig ?? null,
           weeklyShiftConfig: result.weeklyShiftConfig ?? null
         });
@@ -281,7 +285,9 @@ async function pullFromCloud() {
         ticketPayeeIssues: localData.ticketPayeeIssues,
         agentName: localData.agentName,
         theme: localData.theme,
-        countingEnabled: localData.countingEnabled
+        countingEnabled: localData.countingEnabled,
+        shiftConfig: localData.shiftConfig,
+        weeklyShiftConfig: localData.weeklyShiftConfig
       });
       return localData.dailyTotals;
     }
@@ -311,6 +317,16 @@ async function pullFromCloud() {
     if (remoteData.agentName && !localData.agentName) {
       updates.agentName = remoteData.agentName;
     }
+    // Shift config is authored on whichever device the agent actually
+    // configures it on (usually the extension, not this pull) — a second
+    // device with no shift config of its own should still pick up the
+    // cloud copy rather than staying blank forever.
+    if (remoteData.shiftConfig && !localData.shiftConfig) {
+      updates.shiftConfig = remoteData.shiftConfig;
+    }
+    if (remoteData.weeklyShiftConfig && !localData.weeklyShiftConfig) {
+      updates.weeklyShiftConfig = remoteData.weeklyShiftConfig;
+    }
     await saveLocal(updates);
     lastCloudSyncTime = Date.now();
 
@@ -327,7 +343,9 @@ async function pullFromCloud() {
         ticketPayeeIssues: mergedPayeeIssues,
         agentName: updates.agentName || localData.agentName,
         theme: localData.theme,
-        countingEnabled: localData.countingEnabled
+        countingEnabled: localData.countingEnabled,
+        shiftConfig: updates.shiftConfig || localData.shiftConfig,
+        weeklyShiftConfig: updates.weeklyShiftConfig || localData.weeklyShiftConfig
       });
     }
 
@@ -418,7 +436,7 @@ function dailyTotalsChanged(a, b) {
 // (like buttonShape/tapMode), and pullFromCloud never applied it locally
 // anyway, so treating it as cloud-relevant only pushed a value nothing
 // ever pulled back down.
-const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled'];
+const CLOUD_RELEVANT_KEYS = ['dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName', 'countingEnabled', 'shiftConfig', 'weeklyShiftConfig'];
 
 // Cloud pushes run on their own serialized chain, separate from
 // storageWriteQueue, so a slow/jittery network request can't let a later
@@ -444,7 +462,9 @@ async function saveAll(data) {
           ticketPayeeIssues: data.ticketPayeeIssues ?? localData.ticketPayeeIssues,
           agentName: data.agentName ?? localData.agentName,
           theme: data.theme ?? localData.theme,
-          countingEnabled: data.countingEnabled ?? localData.countingEnabled
+          countingEnabled: data.countingEnabled ?? localData.countingEnabled,
+          shiftConfig: data.shiftConfig ?? localData.shiftConfig,
+          weeklyShiftConfig: data.weeklyShiftConfig ?? localData.weeklyShiftConfig
         });
       } catch (e) {
         console.warn('[ZTK Cloud] Cloud sync failed in saveAll, local data is safe:', e.message);
@@ -682,6 +702,8 @@ async function getStats() {
     theme: data.theme,
     tgToken: data.tgToken,
     tgChatId: data.tgChatId,
+    slackToken: data.slackToken,
+    slackUserId: data.slackUserId,
     shiftConfig: data.shiftConfig,
     lastEvent: data.events.length ? data.events[data.events.length - 1] : null,
     dailyTotals: dt,
@@ -786,25 +808,46 @@ async function getDetailedStats(range, dateParam) {
   const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
 
   if (range === 'today') {
-    // Hourly breakdown for a single day
+    // Hourly breakdown for a single day — the x-axis defaults to the day's
+    // shift window (e.g. 12PM-5PM) instead of all 24 hours, since a whole
+    // day of mostly-empty hours around a short shift made the axis far
+    // less readable. Tally every hour's counts first, then widen the shift
+    // window to also cover any hour that actually has activity, so a
+    // ticket logged before clock-in or after clock-out never gets silently
+    // cut off the chart.
     const targetDate = dateParam || todayKey();
-    const hourly = [];
-    for (let h = 0; h < 24; h++) {
-      const entry = { label: `${h}:00`, hour: h };
-      ALL_TYPES.forEach(t => entry[t] = 0);
-      hourly.push(entry);
-    }
-    // Count events that fall on this day by hour
+    const { startHour, endHour } = getShiftHourRange(targetDate, data.shiftConfig, data.weeklyShiftConfig);
+
+    const hourCounts = {};
     for (const ev of events) {
       const evDate = dateKey(ev.timestamp);
       if (evDate === targetDate && ALL_TYPES.includes(ev.type)) {
         const hour = new Date(ev.timestamp).getHours();
-        hourly[hour][ev.type]++;
+        if (!hourCounts[hour]) {
+          hourCounts[hour] = {};
+          ALL_TYPES.forEach(t => hourCounts[hour][t] = 0);
+        }
+        hourCounts[hour][ev.type]++;
       }
     }
+
+    let rangeStart = startHour, rangeEnd = endHour;
+    Object.keys(hourCounts).forEach(hStr => {
+      const h = parseInt(hStr, 10);
+      if (h < rangeStart) rangeStart = h;
+      if (h > rangeEnd) rangeEnd = h;
+    });
+
+    const hourly = [];
+    for (let h = rangeStart; h <= rangeEnd; h++) {
+      const entry = { label: `${h}:00`, hour: h };
+      ALL_TYPES.forEach(t => entry[t] = (hourCounts[h] && hourCounts[h][t]) || 0);
+      hourly.push(entry);
+    }
+
     const payee = getPayeeBucketSeries(
       ticketLog, ticketPayeeIssues, new Set([targetDate]),
-      (entry) => new Date(entry.timestamp).getHours(),
+      (entry) => new Date(entry.timestamp).getHours() - rangeStart,
       hourly.map(h => h.label)
     );
     return { range: 'today', date: targetDate, data: hourly, payee };
@@ -914,6 +957,42 @@ function getShiftInfo(dateStr, shiftConfig, weeklyShiftConfig) {
   } else { // Mon-Fri
     return { shift: 'Night', startTime: '6:00 PM', endTime: '10:00 PM' };
   }
+}
+
+// Same priority order as getShiftInfo (weekly template -> manual shiftConfig
+// -> day-of-week fallback), but returns raw 0-23 hour numbers instead of
+// formatted 12-hour strings — what the "today" detailed-chart hourly
+// breakdown actually needs to know which hours to show on its x-axis.
+// An overnight shift (end <= start, e.g. 18:00 -> 02:00) is capped at hour
+// 23: the events for the day AFTER midnight belong to THAT day's own
+// "today" bucket, not this one, so there's nothing past hour 23 to show here.
+function getShiftHourRange(dateStr, shiftConfig, weeklyShiftConfig) {
+  const parseHour = (hhmm, fallback) => {
+    if (!hhmm) return fallback;
+    const h = parseInt(hhmm.split(':')[0], 10);
+    return Number.isFinite(h) ? h : fallback;
+  };
+
+  if (weeklyShiftConfig) {
+    const dow = DOW_NAMES[new Date(dateStr + 'T00:00:00').getDay()];
+    const wd = weeklyShiftConfig[dow];
+    if (wd && wd.type) {
+      const startHour = parseHour(wd.start, 8);
+      const endHour = parseHour(wd.end, 17);
+      return { startHour, endHour: endHour > startHour ? endHour : 23 };
+    }
+  }
+
+  if (shiftConfig && shiftConfig.shiftType) {
+    const startHour = parseHour(shiftConfig.shiftStart, 8);
+    const endHour = parseHour(shiftConfig.shiftEnd, 17);
+    return { startHour, endHour: endHour > startHour ? endHour : 23 };
+  }
+
+  const day = new Date(dateStr + 'T00:00:00').getDay();
+  if (day === 0) return { startHour: 8, endHour: 12 };  // Sunday
+  if (day === 6) return { startHour: 18, endHour: 23 }; // Saturday (overnight, capped)
+  return { startHour: 18, endHour: 22 };                // Mon-Fri
 }
 
 // Convert 24-hour time (HH:MM) to 12-hour format (HH:MM AM/PM)
@@ -1127,6 +1206,22 @@ async function setTheme(theme) {
   return { success: true };
 }
 
+// ── Shift Config ───────────────────────────────
+// Routed through saveAll (instead of popup.js writing straight to
+// chrome.storage.local) so a shift-config change actually reaches
+// CLOUD_RELEVANT_KEYS' push-to-Firestore path — the web dashboard has no
+// chrome.storage access at all, so this is the only way it can ever see
+// the shift type/start/end the extension has saved.
+async function setShiftConfig(shiftConfig) {
+  await saveAll({ shiftConfig });
+  return { success: true };
+}
+
+async function setWeeklyShiftConfig(weeklyShiftConfig) {
+  await saveAll({ weeklyShiftConfig });
+  return { success: true };
+}
+
 // ── Telegram Settings ─────────────────────────
 
 async function saveTelegramSettings(tgToken, tgChatId) {
@@ -1172,6 +1267,100 @@ async function sendTelegramNote(text) {
     return { success: true };
   } catch (err) {
     console.error('[Telegram] Network Error:', err);
+    return { success: false, error: 'Network Error' };
+  }
+}
+
+// ── Slack Settings ─────────────────────────────
+
+async function saveSlackSettings(slackToken, slackUserId) {
+  await saveLocal({ slackToken, slackUserId });
+  return { success: true };
+}
+
+// ── Send XLSX Report to Slack ──────────────────
+// Every agent's report goes to the same boss over Slack, but as a private
+// DM rather than a shared channel — conversations.open resolves the boss's
+// Slack user ID into a 1:1 DM channel (reused if one already exists), so
+// each agent's daily report stays visible only to them and the boss, the
+// same way each agent's own Telegram note only goes to their own chat.
+// Uses Slack's newer 3-step external upload flow (get an upload URL, PUT
+// the raw bytes to it, then complete/share the upload) since files.upload
+// is deprecated for apps created after Slack retired it in favor of this.
+async function sendXlsxToSlack(base64Bytes, filename) {
+  const data = await getAll();
+  const token = data.slackToken;
+  const userId = data.slackUserId;
+
+  if (!token || !userId) {
+    return { success: false, error: 'Slack credentials not set in Settings.' };
+  }
+
+  const jsonHeaders = {
+    'Authorization': `Bearer ${token}`,
+    'Content-Type': 'application/json; charset=utf-8'
+  };
+
+  try {
+    // 1. Open (or reuse) the DM channel with the boss
+    const openRes = await fetch('https://slack.com/api/conversations.open', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({ users: userId })
+    });
+    const openJson = await openRes.json();
+    if (!openJson.ok) {
+      console.error('[Slack] conversations.open error:', openJson.error);
+      return { success: false, error: `Slack Error: ${openJson.error}` };
+    }
+    const channelId = openJson.channel.id;
+
+    // Decode the base64 the popup sent back into raw file bytes
+    const binary = atob(base64Bytes);
+    const bytes = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+
+    // 2. Ask Slack for a one-time upload URL
+    const urlRes = await fetch('https://slack.com/api/files.getUploadURLExternal', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: new URLSearchParams({ filename, length: String(bytes.length) })
+    });
+    const urlJson = await urlRes.json();
+    if (!urlJson.ok) {
+      console.error('[Slack] getUploadURLExternal error:', urlJson.error);
+      return { success: false, error: `Slack Error: ${urlJson.error}` };
+    }
+
+    // 3. Upload the raw file bytes to that URL
+    const uploadRes = await fetch(urlJson.upload_url, { method: 'POST', body: bytes });
+    if (!uploadRes.ok) {
+      console.error('[Slack] Upload PUT failed:', uploadRes.status);
+      return { success: false, error: `Slack upload failed: ${uploadRes.status}` };
+    }
+
+    // 4. Finalize the upload and share it straight into the boss's DM
+    const completeRes = await fetch('https://slack.com/api/files.completeUploadExternal', {
+      method: 'POST',
+      headers: jsonHeaders,
+      body: JSON.stringify({
+        files: [{ id: urlJson.file_id, title: filename }],
+        channel_id: channelId,
+        initial_comment: `📊 Daily ticket report — ${filename}`
+      })
+    });
+    const completeJson = await completeRes.json();
+    if (!completeJson.ok) {
+      console.error('[Slack] completeUploadExternal error:', completeJson.error);
+      return { success: false, error: `Slack Error: ${completeJson.error}` };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('[Slack] Network Error:', err);
     return { success: false, error: 'Network Error' };
   }
 }
@@ -1299,11 +1488,23 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'SET_THEME':
           sendResponse(await setTheme(msg.theme));
           break;
+        case 'SET_SHIFT_CONFIG':
+          sendResponse(await setShiftConfig(msg.shiftConfig));
+          break;
+        case 'SET_WEEKLY_SHIFT_CONFIG':
+          sendResponse(await setWeeklyShiftConfig(msg.weeklyShiftConfig));
+          break;
         case 'SET_TELEGRAM':
           sendResponse(await saveTelegramSettings(msg.tgToken, msg.tgChatId));
           break;
         case 'SEND_TELEGRAM_NOTE':
           sendResponse(await sendTelegramNote(msg.text));
+          break;
+        case 'SET_SLACK':
+          sendResponse(await saveSlackSettings(msg.slackToken, msg.slackUserId));
+          break;
+        case 'SEND_XLSX_TO_SLACK':
+          sendResponse(await sendXlsxToSlack(msg.base64Bytes, msg.filename));
           break;
         case 'FORCE_SYNC':
           lastCloudSyncTime = 0;

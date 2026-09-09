@@ -124,6 +124,10 @@ function sumTotals(dailyTotals, keys) {
 
 // ── State ───────────────────────────────────────
 let currentRange = 'today';
+// Which single day "Today" shows — defaults to the actual current date but
+// can be repointed at any past day via the date picker next to the range
+// nav, the same way the extension popup's chart-title date picker works.
+let selectedTodayDateStr = todayKey();
 let chartViewMode = 'tickets';
 let chartInstance = null;
 let userData = null; // { dailyTotals, ticketLog, masterLogHistory, ticketPayeeIssues, agentName }
@@ -176,7 +180,7 @@ async function loadUserData(uid) {
     try {
         const snap = await getDoc(doc(db, 'users', uid, 'data', 'tracker'));
         if (!snap.exists()) {
-            userData = { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, agentName: '' };
+            userData = { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, shiftConfig: null, weeklyShiftConfig: null, agentName: '' };
             return;
         }
         const d = snap.data();
@@ -185,11 +189,13 @@ async function loadUserData(uid) {
             ticketLog: safeParse(d.ticketLogJson, []),
             masterLogHistory: safeParse(d.masterLogHistoryJson, []),
             ticketPayeeIssues: safeParse(d.ticketPayeeIssuesJson, {}),
+            shiftConfig: safeParse(d.shiftConfigJson, null),
+            weeklyShiftConfig: safeParse(d.weeklyShiftConfigJson, null),
             agentName: d.agentName || ''
         };
     } catch (e) {
         console.error('[TT Dashboard] Failed to load user data:', e.message);
-        userData = { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, agentName: '' };
+        userData = { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, shiftConfig: null, weeklyShiftConfig: null, agentName: '' };
     }
 }
 
@@ -240,7 +246,7 @@ document.querySelectorAll('[data-lb-cat]').forEach(btn => {
 
 // ── Active date keys for the selected range ────
 function getActiveDateKeys() {
-    if (currentRange === 'today') return [todayKey()];
+    if (currentRange === 'today') return [selectedTodayDateStr];
     if (currentRange === 'week') return getLastNDaysKeys(7);
     if (currentRange === 'month') return getCurrentMonthKeys();
     return [];
@@ -268,7 +274,7 @@ function buildTicketsChartData() {
     if (currentRange === 'today') {
         const d = userData.dailyTotals[keys[0]] || emptyTotals();
         return {
-            labels: ['Today'],
+            labels: [keys[0] === todayKey() ? 'Today' : fmtShortDateStr(keys[0])],
             datasets: ALL_TYPES.map(t => ({
                 label: cap(t), data: [d[t] || 0],
                 backgroundColor: COLORS[t].bg, borderColor: COLORS[t].border, borderWidth: 1.5, borderRadius: 4
@@ -502,9 +508,27 @@ document.querySelectorAll('.range-btn').forEach(btn => {
         document.querySelectorAll('.range-btn').forEach(b => b.classList.remove('active'));
         btn.classList.add('active');
         currentRange = btn.dataset.range;
+        // Clicking "Today" directly always means the actual current day —
+        // the date picker is the deliberate way to look at a different one.
+        if (currentRange === 'today') {
+            selectedTodayDateStr = todayKey();
+            if ($('stats-date-input')) $('stats-date-input').value = selectedTodayDateStr;
+        }
         renderAll();
     });
 });
+
+// ── Stats date picker ────────────────────────────
+if ($('stats-date-input')) {
+    $('stats-date-input').value = selectedTodayDateStr;
+    $('stats-date-input').addEventListener('change', (e) => {
+        if (!e.target.value) return;
+        selectedTodayDateStr = e.target.value;
+        document.querySelectorAll('.range-btn').forEach(b => b.classList.toggle('active', b.dataset.range === 'today'));
+        currentRange = 'today';
+        renderAll();
+    });
+}
 
 // ── Chart view toggle ───────────────────────────
 document.querySelectorAll('.chart-view-btn[data-view]').forEach(btn => {
@@ -620,27 +644,78 @@ function getPayeeBucketSeriesLocal(ticketLog, ticketPayeeIssues, validDates, buc
     };
 }
 
+// Mirrors background.js's getShiftHourRange — same priority order (weekly
+// template -> manual shiftConfig -> day-of-week fallback), raw 0-23 hours.
+// Keep both in sync if thresholds or fallback shift times change.
+function getShiftHourRange(dateStr, shiftConfig, weeklyShiftConfig) {
+    const parseHour = (hhmm, fallback) => {
+        if (!hhmm) return fallback;
+        const h = parseInt(hhmm.split(':')[0], 10);
+        return Number.isFinite(h) ? h : fallback;
+    };
+
+    if (weeklyShiftConfig) {
+        const dow = DOW_NAMES_DETAIL[new Date(dateStr + 'T00:00:00').getDay()];
+        const wd = weeklyShiftConfig[dow];
+        if (wd && wd.type) {
+            const startHour = parseHour(wd.start, 8);
+            const endHour = parseHour(wd.end, 17);
+            return { startHour, endHour: endHour > startHour ? endHour : 23 };
+        }
+    }
+
+    if (shiftConfig && shiftConfig.shiftType) {
+        const startHour = parseHour(shiftConfig.shiftStart, 8);
+        const endHour = parseHour(shiftConfig.shiftEnd, 17);
+        return { startHour, endHour: endHour > startHour ? endHour : 23 };
+    }
+
+    const day = new Date(dateStr + 'T00:00:00').getDay();
+    if (day === 0) return { startHour: 8, endHour: 12 };
+    if (day === 6) return { startHour: 18, endHour: 23 };
+    return { startHour: 18, endHour: 22 };
+}
+
 function getDetailedStatsLocal(range, dateParam) {
     const dt = userData.dailyTotals || {};
     const ticketLog = userData.ticketLog || [];
     const ticketPayeeIssues = userData.ticketPayeeIssues || {};
 
     if (range === 'today') {
+        // x-axis defaults to the day's shift window instead of all 24
+        // hours, widened to also cover any hour with actual activity
+        // outside that window — mirrors background.js's getDetailedStats.
         const targetDate = dateParam || todayKey();
-        const hourly = [];
-        for (let h = 0; h < 24; h++) {
-            const entry = { label: `${h}:00`, hour: h };
-            ALL_TYPES.forEach(t => entry[t] = 0);
-            hourly.push(entry);
-        }
+        const { startHour, endHour } = getShiftHourRange(targetDate, userData.shiftConfig, userData.weeklyShiftConfig);
+
+        const hourCounts = {};
         ticketLog.forEach(e => {
             if (e.date === targetDate && ALL_TYPES.includes(e.type)) {
-                hourly[new Date(e.timestamp).getHours()][e.type]++;
+                const hour = new Date(e.timestamp).getHours();
+                if (!hourCounts[hour]) {
+                    hourCounts[hour] = {};
+                    ALL_TYPES.forEach(t => hourCounts[hour][t] = 0);
+                }
+                hourCounts[hour][e.type]++;
             }
         });
+
+        let rangeStart = startHour, rangeEnd = endHour;
+        Object.keys(hourCounts).forEach(hStr => {
+            const h = parseInt(hStr, 10);
+            if (h < rangeStart) rangeStart = h;
+            if (h > rangeEnd) rangeEnd = h;
+        });
+
+        const hourly = [];
+        for (let h = rangeStart; h <= rangeEnd; h++) {
+            const entry = { label: `${h}:00`, hour: h };
+            ALL_TYPES.forEach(t => entry[t] = (hourCounts[h] && hourCounts[h][t]) || 0);
+            hourly.push(entry);
+        }
         const payee = getPayeeBucketSeriesLocal(
             ticketLog, ticketPayeeIssues, new Set([targetDate]),
-            (e) => new Date(e.timestamp).getHours(),
+            (e) => new Date(e.timestamp).getHours() - rangeStart,
             hourly.map(h => h.label)
         );
         return { range: 'today', data: hourly, payee };
@@ -861,6 +936,172 @@ document.querySelectorAll('[data-dview]').forEach(btn => {
         loadDetailChart();
     });
 });
+
+// ── XLSX Report Export ──────────────────────────
+// Client-side port of the extension's popup.js buildXLSXBytes/
+// getEffectiveShiftFields + xlsx-writer.js — same report layout/columns, so
+// a report downloaded here looks identical to one downloaded from the
+// extension. Needs XlsxWriter (web/xlsx-writer.js, a copy of the
+// extension's dependency-free .xlsx writer) loaded before this script.
+const REPORT_COL_WIDTHS = [13, 20, 9, 14, 14, 30, 17, 30, 30, 29, 20];
+const REPORT_HEADERS = [
+    'Date', 'Agent name', 'Shift', 'Starting Time', 'End Time',
+    'New Handled Tickets -\nMoved to Open or\nPending',
+    'Updates to\nExisting',
+    'New/Pending/Open\nTickets- Moved to\nCompliance',
+    'New/Pending/Open Tickets -\nMoved to Escalations',
+    'Remarks- for\nspecial cases',
+    'Closed Tickets,\nif any'
+];
+
+function getHeaderColorForCount(count) {
+    if (count > 120) return '5D6D7E';
+    if (count >= 100) return '76448A';
+    if (count >= 90) return '922B21';
+    if (count >= 80) return '1B4F72';
+    if (count >= 70) return '2E86C1';
+    if (count >= 60) return '00B0F0';
+    if (count >= 45) return '1D8348';
+    if (count >= 30) return 'A9DFBF';
+    if (count >= 15) return 'F1C40F';
+    return 'ED7D31';
+}
+
+function convertTo12Hour(timeStr) {
+    if (!timeStr) return '';
+    let [hours, minutes] = timeStr.split(':');
+    hours = parseInt(hours, 10);
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours = hours % 12;
+    hours = hours ? hours : 12;
+    return `${hours < 10 ? '0' + hours : hours}:${minutes} ${ampm}`;
+}
+
+// Same priority as the extension's getEffectiveShiftFields, but unified
+// across every date (the web dashboard has no "today's live input fields"
+// concept to special-case) — a manual edit saved for exactly this date
+// (shiftConfig.savedDateKey === targetDateStr) wins, then the recurring
+// weekly template for that day-of-week, then whatever shiftConfig has as a
+// general fallback, then a hardcoded default.
+function getEffectiveShiftFieldsForDate(targetDateStr) {
+    const shiftConfig = userData.shiftConfig;
+    const weeklyShiftConfig = userData.weeklyShiftConfig;
+    const remarks = (shiftConfig && shiftConfig.savedDateKey === targetDateStr) ? (shiftConfig.shiftRemarks || '') : '';
+
+    if (shiftConfig && shiftConfig.savedDateKey === targetDateStr && shiftConfig.shiftType) {
+        return {
+            shiftType: shiftConfig.shiftType || 'Day',
+            startTime12: convertTo12Hour(shiftConfig.shiftStart || ''),
+            endTime12: convertTo12Hour(shiftConfig.shiftEnd || ''),
+            remarks
+        };
+    }
+
+    if (weeklyShiftConfig) {
+        const dow = DOW_NAMES_DETAIL[new Date(targetDateStr + 'T00:00:00').getDay()];
+        const wd = weeklyShiftConfig[dow];
+        if (wd && wd.type) {
+            return {
+                shiftType: wd.type || 'Day',
+                startTime12: convertTo12Hour(wd.start || ''),
+                endTime12: convertTo12Hour(wd.end || ''),
+                remarks
+            };
+        }
+    }
+
+    if (shiftConfig && shiftConfig.shiftType) {
+        return {
+            shiftType: shiftConfig.shiftType || 'Day',
+            startTime12: convertTo12Hour(shiftConfig.shiftStart || ''),
+            endTime12: convertTo12Hour(shiftConfig.shiftEnd || ''),
+            remarks
+        };
+    }
+
+    return { shiftType: 'Day', startTime12: '', endTime12: '', remarks: '' };
+}
+
+function downloadXLSXReport(targetDateStr) {
+    if (!userData) return;
+    const dateParts = targetDateStr.split('-');
+    const displayCellDate = `${parseInt(dateParts[2])}/${parseInt(dateParts[1])}/${dateParts[0]}`;
+
+    let opArr = [], newArr = [], compArr = [], escArr = [], clsdArr = [];
+    const ticketLog = userData.ticketLog || [];
+
+    // Same per-ticket-per-day dedup as the extension's export: a ticket
+    // re-classified twice in one day shows once, under its latest category.
+    const sameDay = ticketLog.filter(t => t.date === targetDateStr).sort((a, b) => a.timestamp - b.timestamp);
+    const latestByTicket = new Map();
+    sameDay.forEach(t => latestByTicket.set(t.ticketNumber, t));
+    latestByTicket.forEach(t => {
+        if (t.type === 'open') opArr.push(t.ticketNumber);
+        if (t.type === 'new') newArr.push(t.ticketNumber);
+        if (t.type === 'team') opArr.push(t.ticketNumber); // Team merges into Open
+        if (t.type === 'compliance') compArr.push(t.ticketNumber);
+        if (t.type === 'escalation') escArr.push(t.ticketNumber);
+        if (t.type === 'closed') clsdArr.push(t.ticketNumber);
+    });
+
+    const { shiftType, startTime12, endTime12, remarks } = getEffectiveShiftFieldsForDate(targetDateStr);
+    const agentName = userData.agentName || 'Zendesk Agent';
+    const payeeIssues = userData.ticketPayeeIssues || {};
+
+    const { STYLES } = XlsxWriter;
+    const maxContentRows = Math.max(1, opArr.length, newArr.length, compArr.length, escArr.length, clsdArr.length);
+    const totalTemplateRows = Math.max(28, maxContentRows + 1);
+    const totalTickets = opArr.length + newArr.length + compArr.length + escArr.length + clsdArr.length;
+    const headerColor = getHeaderColorForCount(totalTickets);
+
+    const formatCellWithIssue = (ticketId) => {
+        if (!ticketId) return '';
+        const cleanId = String(ticketId).startsWith('#') ? String(ticketId) : `#${ticketId}`;
+        if (payeeIssues && payeeIssues[ticketId]) return `${cleanId} - ${payeeIssues[ticketId]}`;
+        return cleanId;
+    };
+
+    const headerRow = { height: 55, cells: REPORT_HEADERS.map(v => ({ value: v, style: STYLES.HEADER })) };
+    const dataRows = [];
+    for (let i = 0; i < totalTemplateRows - 1; i++) {
+        dataRows.push({
+            height: 38,
+            cells: [
+                i === 0 ? displayCellDate : '',
+                i === 0 ? agentName : '',
+                i === 0 ? shiftType : '',
+                i === 0 ? startTime12 : '',
+                i === 0 ? endTime12 : '',
+                formatCellWithIssue(newArr[i]),
+                formatCellWithIssue(opArr[i]),
+                formatCellWithIssue(compArr[i]),
+                formatCellWithIssue(escArr[i]),
+                i === 0 ? remarks : '',
+                formatCellWithIssue(clsdArr[i])
+            ].map(v => ({ value: v, style: STYLES.DATA }))
+        });
+    }
+
+    const reportSheet = { name: 'Report', cols: REPORT_COL_WIDTHS.map(w => ({ width: w })), rows: [headerRow, ...dataRows] };
+    const bytes = XlsxWriter.buildWorkbook([reportSheet], { headerColor });
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+    const finalExportName = `tickets-${targetDateStr}.xlsx`;
+
+    const blobUrl = URL.createObjectURL(blob);
+    const downloadLink = document.createElement('a');
+    downloadLink.href = blobUrl;
+    downloadLink.download = finalExportName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(blobUrl);
+}
+
+if ($('export-xlsx-btn')) {
+    $('export-xlsx-btn').addEventListener('click', () => {
+        downloadXLSXReport(selectedTodayDateStr);
+    });
+}
 
 // ── PWA service worker ──────────────────────────
 if ('serviceWorker' in navigator) {

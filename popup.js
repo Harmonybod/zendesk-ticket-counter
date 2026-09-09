@@ -69,7 +69,7 @@ const LEVELS = [
     { level: 2, name: 'Initiate', min: 15, color: '#F1C40F', tagline: 'Finding your rhythm' },
     { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF', tagline: 'Building momentum' },
     { level: 4, name: 'Adept', min: 45, color: '#1D8348', tagline: 'Skilled and steady' },
-    { level: 5, name: 'Elite', min: 60, color: '#AED6F1', tagline: 'Among the best' },
+    { level: 5, name: 'Elite', min: 60, color: '#00B0F0', tagline: 'Among the best' },
     { level: 6, name: 'Veteran', min: 70, color: '#2E86C1', tagline: 'Battle-tested' },
     { level: 7, name: 'Master', min: 80, color: '#1B4F72', tagline: 'Command of the craft' },
     { level: 8, name: 'Grandmaster', min: 90, color: '#922B21', tagline: 'Few can match you' },
@@ -486,7 +486,12 @@ function applySettingsUI() {
     $('tg-token-input').value = stats.tgToken || '';
     $('tg-chat-id-input').value = stats.tgChatId || '';
     $('tg-status').textContent = (stats.tgToken && stats.tgChatId) ? '✓ Telegram connected' : '';
-    
+
+    // Slack
+    if ($('slack-token-input')) $('slack-token-input').value = stats.slackToken || '';
+    if ($('slack-user-id-input')) $('slack-user-id-input').value = stats.slackUserId || '';
+    if ($('slack-status')) $('slack-status').textContent = (stats.slackToken && stats.slackUserId) ? '✓ Slack connected' : '';
+
     // Shift Config
     if (stats.shiftConfig) {
         if ($('shift-type-input')) $('shift-type-input').value = stats.shiftConfig.shiftType || 'Day';
@@ -670,8 +675,27 @@ $('save-tg-btn').addEventListener('click', () => {
         }
     });
 });
+
+// ── Slack Settings ─────────────────────────────
+if ($('save-slack-btn')) {
+    $('save-slack-btn').addEventListener('click', () => {
+        const slackToken = $('slack-token-input').value.trim();
+        const slackUserId = $('slack-user-id-input').value.trim();
+        chrome.runtime.sendMessage({ action: 'SET_SLACK', slackToken, slackUserId }, (response) => {
+            if (response && response.success) {
+                stats.slackToken = slackToken;
+                stats.slackUserId = slackUserId;
+                $('slack-status').textContent = (slackToken && slackUserId) ? '✓ Slack connected' : 'Slack credentials cleared';
+                showToast('✓ Slack settings saved');
+            }
+        });
+    });
+}
 $('tg-token-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-tg-btn').click(); });
 $('tg-chat-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-tg-btn').click(); });
+
+if ($('slack-token-input')) $('slack-token-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-slack-btn').click(); });
+if ($('slack-user-id-input')) $('slack-user-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-slack-btn').click(); });
 
 // ── Force Sync ────────────────────────────────
 $('force-sync-btn').addEventListener('click', () => {
@@ -1377,6 +1401,18 @@ if ($('export-xls')) {
     });
 }
 
+if ($('send-slack-btn')) {
+    $('send-slack-btn').addEventListener('click', () => {
+        // Same "today, unless the Today date-picker has a specific day
+        // selected" rule the XLSX download button uses above.
+        const targetDateStr = (currentRange === 'today' && customRangeParams && customRangeParams.date)
+            ? customRangeParams.date
+            : fmtDateKey(new Date());
+        sendSingleDaySpreadsheetToSlack(targetDateStr);
+        showToast('Sending report to Slack…');
+    });
+}
+
 // ── Detailed Chart Modal ──────────────────────
 let detailChartInstance = null;
 let detailRange = 'today';
@@ -1682,14 +1718,17 @@ function getHeaderColorForCount(count) {
     if (count >= 90) return '922B21'; // Dark Red
     if (count >= 80) return '1B4F72'; // Dark Blue
     if (count >= 70) return '2E86C1'; // Blue
-    if (count >= 60) return 'AED6F1'; // Light Blue
+    if (count >= 60) return '00B0F0'; // Light Blue
     if (count >= 45) return '1D8348'; // Dark Green
     if (count >= 30) return 'A9DFBF'; // Light Green
     if (count >= 15) return 'F1C40F'; // Yellow
     return 'ED7D31'; // Orange
 }
 
-function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
+// Builds the raw .xlsx bytes for a single-day shift report — shared by the
+// download button and the "Send to Slack" button so both produce the exact
+// same report instead of duplicating the row-construction logic.
+function buildXLSXBytes(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
     const { STYLES } = XlsxWriter;
     const maxContentRows = Math.max(1, openArr.length, newArr.length, complianceArr.length, escalationsArr.length, closedArr.length);
     const totalTemplateRows = Math.max(28, maxContentRows + 1);
@@ -1738,8 +1777,16 @@ function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, 
     };
 
     const bytes = XlsxWriter.buildWorkbook([reportSheet], { headerColor });
-    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     const finalExportName = `tickets-${targetDateStr}.xlsx`;
+    return { bytes, finalExportName };
+}
+
+function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
+    const { bytes, finalExportName } = buildXLSXBytes(
+        agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr,
+        openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap
+    );
+    const blob = new Blob([bytes], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
 
     const blobUrl = URL.createObjectURL(blob);
     const downloadLink = document.createElement('a');
@@ -1749,6 +1796,41 @@ function generateAndDownloadXLSX(agentName, shift, startTime, endTime, remarks, 
     downloadLink.click();
     document.body.removeChild(downloadLink);
     URL.revokeObjectURL(blobUrl);
+}
+
+// Base64-encodes raw bytes in chunks (avoids blowing the call stack on
+// String.fromCharCode(...bytes) for a multi-KB file) so the .xlsx can ride
+// along a chrome.runtime.sendMessage as JSON to the background service
+// worker, which is what actually talks to the Slack API.
+function bytesToBase64(bytes) {
+    let binary = '';
+    const chunkSize = 0x8000;
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+        binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize));
+    }
+    return btoa(binary);
+}
+
+function sendXLSXToSlack(agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr, openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap) {
+    const { bytes, finalExportName } = buildXLSXBytes(
+        agentName, shift, startTime, endTime, remarks, displayDateStr, targetDateStr,
+        openArr, newArr, complianceArr, escalationsArr, closedArr, payeeIssuesMap
+    );
+
+    chrome.runtime.sendMessage(
+        { action: 'SEND_XLSX_TO_SLACK', base64Bytes: bytesToBase64(bytes), filename: finalExportName },
+        (response) => {
+            if (chrome.runtime.lastError || !response) {
+                showToast('⚠ Failed to reach Slack');
+                return;
+            }
+            if (response.success) {
+                showToast('✓ Report sent to Slack');
+            } else {
+                showToast(`⚠ ${response.error || 'Slack send failed'}`);
+            }
+        }
+    );
 }
 
 function convertTo12Hour(timeStr) {
@@ -2165,7 +2247,10 @@ if ($('mini-calendar-picker')) {
     $('mini-calendar-picker').addEventListener('change', auditSelectedCalendarDate);
 }
 
-function exportSingleDaySpreadsheet(targetDateStr) {
+// Gathers the same per-ticket-category arrays + shift fields that both the
+// download button and the "Send to Slack" button need, so building that
+// data only happens in one place.
+function buildSingleDayReportFields(targetDateStr) {
     const dateParts = targetDateStr.split('-');
     const displayCellDate = `${parseInt(dateParts[2])}/${parseInt(dateParts[1])}/${dateParts[0]}`;
 
@@ -2196,11 +2281,19 @@ function exportSingleDaySpreadsheet(targetDateStr) {
     const remarks = $('shift-remarks-input')?.value || '';
     const payeeIssues = stats?.ticketPayeeIssues || {};
 
-    generateAndDownloadXLSX(
+    return [
         agentName, shiftType, startTime12, endTime12, remarks,
         displayCellDate, targetDateStr,
         opArr, newArr, compArr, escArr, clsdArr, payeeIssues
-    );
+    ];
+}
+
+function exportSingleDaySpreadsheet(targetDateStr) {
+    generateAndDownloadXLSX(...buildSingleDayReportFields(targetDateStr));
+}
+
+function sendSingleDaySpreadsheetToSlack(targetDateStr) {
+    sendXLSXToSlack(...buildSingleDayReportFields(targetDateStr));
 }
 
 // ── Security PIN Panel Handler ────────────────────────────────────────────
@@ -2461,7 +2554,7 @@ document.querySelectorAll('[data-lb-cat]').forEach(btn => {
                 shiftRemarks: $('shift-remarks-input')?.value,
                 savedDateKey: fmtDateKey(new Date())
             };
-            chrome.storage.local.set({ shiftConfig });
+            chrome.runtime.sendMessage({ action: 'SET_SHIFT_CONFIG', shiftConfig });
         });
     }
 });
@@ -2607,7 +2700,12 @@ if ($('weekly-shift-add-group')) {
 if ($('weekly-shift-save')) {
     $('weekly-shift-save').addEventListener('click', () => {
         const flat = flattenShiftGroups(weeklyShiftGroupsDraft);
-        chrome.storage.local.set({ weeklyShiftGroups: weeklyShiftGroupsDraft, weeklyShiftConfig: flat }, () => {
+        // weeklyShiftGroups (the UI's own editable draft shape) stays a
+        // plain local write — only weeklyShiftConfig (the flattened form
+        // background.js/getEffectiveShiftFields/the web dashboard actually
+        // read) needs to go through SET_WEEKLY_SHIFT_CONFIG to reach the cloud.
+        chrome.storage.local.set({ weeklyShiftGroups: weeklyShiftGroupsDraft });
+        chrome.runtime.sendMessage({ action: 'SET_WEEKLY_SHIFT_CONFIG', weeklyShiftConfig: flat }, () => {
             weeklyShiftConfigCache = flat;
             applyTodaysWeeklyShiftIfNeeded();
             showToast('✓ Weekly shift schedule saved');

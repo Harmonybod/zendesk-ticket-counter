@@ -67,6 +67,13 @@
       <button class="range-btn" data-range="month">Month</button>
     </nav>
 
+    <div class="range-tools">
+      <input type="date" id="stats-date-input" class="stats-date-input" title="Pick a date to view its stats" />
+      <button id="export-xlsx-btn" class="btn-export-xlsx" title="Download that day's shift report as .xlsx">
+        <span class="footer-icon">⬇</span> XLSX
+      </button>
+    </div>
+
     <section class="stats-grid" id="stats-grid">
       <div class="stat-card stat-open">
         <div class="stat-dot red-dot"></div>
@@ -207,6 +214,7 @@
   </div>
 
   <script src="chart.min.js"></script>
+  <script src="xlsx-writer.js"></script>
   <script type="module" src="app.js"></script>
 </body>
 </html>

@@ -1025,6 +1025,7 @@
 
 .fx-glass,
 .fx-crack,
+.fx-shatter,
 .fx-smoke,
 .fx-fire,
 .fx-buzzer {
@@ -1041,8 +1042,12 @@
   opacity: 0.8;
 }
 
+/* Three stacked crack layers (sparse -> moderate -> dense) so the glass
+   visibly gains MORE cracks as --fx-progress climbs through the "cracking"
+   stage, instead of one static crack image just fading in uniformly. Each
+   layer keeps every line the previous one had, plus new branches reaching
+   further toward the corners. */
 .fx-crack {
-  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15 M23 19 L15 29 L19 37 M23 19 L31 31 M15 29 L6 33" stroke="white" stroke-width="1.4" fill="none"/></svg>');
   background-size: 100% 100%;
   background-position: center;
   background-repeat: no-repeat;
@@ -1050,38 +1055,80 @@
   transition: opacity 0.4s ease;
 }
 
-.fx-smoke {
-  overflow: hidden;
+.fx-crack-1 {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15" stroke="white" stroke-width="1.4" fill="none"/></svg>');
 }
 
+.fx-crack-2 {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15 M23 19 L15 29 L19 37 M23 19 L31 31 M15 29 L6 33" stroke="white" stroke-width="1.4" fill="none"/></svg>');
+}
+
+.fx-crack-3 {
+  background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15 M23 19 L15 29 L19 37 M23 19 L31 31 M15 29 L6 33 M20 3 L25 8 M7 10 L2 14 M35 15 L38 20 M19 37 L23 39 M31 31 L36 34 M6 33 L2 36" stroke="white" stroke-width="1.3" fill="none"/></svg>');
+}
+
+/* A brief white "pop" the instant the glass actually breaks (cracking ->
+   smoke transition) — plays once via the CSS animation restarting whenever
+   data-fx-stage newly becomes "smoke", then fades away on its own. */
+.fx-shatter {
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.5) 35%, rgba(255, 255, 255, 0) 70%);
+  opacity: 0;
+  transform: scale(0.3);
+}
+
+@keyframes zd-fx-shatter-burst {
+  0%   { opacity: 0.9; transform: scale(0.3); }
+  60%  { opacity: 0.7; transform: scale(1.3); }
+  100% { opacity: 0;   transform: scale(1.6); }
+}
+
+.zd-btn[data-fx-stage="smoke"] .fx-shatter {
+  animation: zd-fx-shatter-burst 0.5s ease-out;
+}
+
+.fx-smoke {
+  overflow: visible;
+}
+
+/* Fixed px sizing + a fixed px rise (not a % of the button's own box) so
+   the smoke always puffs straight up by the same real distance no matter
+   how wide/flat the button gets in horizontal widget mode — a % based rise
+   was moving a shorter, squashed distance on a short-but-wide button,
+   which read as the smoke spreading sideways instead of rising. */
 .fx-smoke::before,
 .fx-smoke::after {
   content: '';
   position: absolute;
-  bottom: 6%;
-  width: 55%;
-  height: 55%;
+  bottom: 4px;
+  left: 50%;
+  width: 14px;
+  height: 14px;
   border-radius: 50%;
-  background: radial-gradient(circle, rgba(150, 150, 150, 0.7) 0%, rgba(150, 150, 150, 0) 70%);
+  background: radial-gradient(circle, rgba(160, 160, 160, 0.75) 0%, rgba(160, 160, 160, 0) 70%);
   filter: blur(1.5px);
   animation: zd-fx-smoke-drift 2.6s ease-in-out infinite;
   opacity: 0;
 }
 
-.fx-smoke::before { left: 6%; animation-delay: 0s; }
-.fx-smoke::after { left: 40%; animation-delay: 1.3s; }
+.fx-smoke::before { margin-left: -14px; animation-delay: 0s; }
+.fx-smoke::after   { margin-left: 2px;  animation-delay: 1.3s; }
+
+/* A second smoke-puff source (added alongside the first in the markup) so
+   there are 4 puffs total once broken — "more amount on the smoke". */
+.fx-smoke.fx-smoke-2::before { margin-left: -4px; animation-delay: 0.65s; }
+.fx-smoke.fx-smoke-2::after  { margin-left: 9px;  animation-delay: 1.95s; }
 
 @keyframes zd-fx-smoke-drift {
   0%   { transform: translateY(0) scale(0.6); opacity: 0.85; }
-  60%  { transform: translateY(-70%) scale(1.15); opacity: 0.4; }
-  100% { transform: translateY(-110%) scale(0.7); opacity: 0; }
+  60%  { transform: translateY(-26px) scale(1.15); opacity: 0.4; }
+  100% { transform: translateY(-40px) scale(0.7); opacity: 0; }
 }
 
 .fx-fire {
   top: auto;
   bottom: 0;
   height: 70%;
-  background: radial-gradient(ellipse at bottom, #fff3b0 0%, #ffb703 30%, #fb5607 60%, rgba(251, 86, 7, 0) 82%);
+  background: radial-gradient(ellipse at bottom, #fff8d6 0%, #ffc93c 25%, #ff5b1a 50%, #e8291c 75%, rgba(232, 41, 28, 0) 88%);
   opacity: 0;
   transform-origin: bottom center;
   animation: zd-fx-fire-flicker 0.45s ease-in-out infinite alternate;
@@ -1185,8 +1232,35 @@
 }
 
 /* ── Stage-driven intensity — ramps via --fx-progress (0-1) ─────────────── */
-.zd-btn[data-fx-stage="cracking"] .fx-crack {
-  opacity: calc(var(--fx-progress, 0) * 0.85);
+
+/* Cracking gets visibly brighter as it progresses (not just the crack lines
+   fading in) — real stressed glass catches more light the more it's cracked. */
+.zd-btn[data-fx-stage="cracking"] {
+  filter: brightness(calc(1 + var(--fx-progress, 0) * 0.4));
+}
+
+/* Layer 1 finishes revealing first, then 2, then 3 — MORE cracks appear as
+   progress climbs, instead of one image just fading in uniformly. */
+.zd-btn[data-fx-stage="cracking"] .fx-crack-1 {
+  opacity: calc(clamp(0, var(--fx-progress, 0) / 0.4, 1) * 0.85);
+}
+
+.zd-btn[data-fx-stage="cracking"] .fx-crack-2 {
+  opacity: calc(clamp(0, (var(--fx-progress, 0) - 0.25) / 0.45, 1) * 0.85);
+}
+
+.zd-btn[data-fx-stage="cracking"] .fx-crack-3 {
+  opacity: calc(clamp(0, (var(--fx-progress, 0) - 0.55) / 0.45, 1) * 0.85);
+}
+
+/* Once the glass has actually broken (smoke onward), all three crack
+   layers stay fully shown and the button itself reads brighter overall —
+   "after the glass is broken, the color of the widget is brighter". */
+.zd-btn[data-fx-stage="smoke"],
+.zd-btn[data-fx-stage="fire"],
+.zd-btn[data-fx-stage="buzzer"],
+.zd-btn[data-fx-stage="crowned"] {
+  filter: brightness(1.3) saturate(1.15);
 }
 
 .zd-btn[data-fx-stage="smoke"] .fx-crack,
@@ -1198,7 +1272,7 @@
 
 .zd-btn[data-fx-stage="smoke"] .fx-smoke::before,
 .zd-btn[data-fx-stage="smoke"] .fx-smoke::after {
-  opacity: calc(0.25 + var(--fx-progress, 0) * 0.5);
+  opacity: calc(0.35 + var(--fx-progress, 0) * 0.55);
 }
 
 .zd-btn[data-fx-stage="fire"] .fx-fire {

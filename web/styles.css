@@ -625,6 +625,54 @@ h1, h2 { font-weight: 700; }
   color: var(--text-1);
 }
 
+/* ── Date Picker + XLSX Export (below the range nav) ─────────────────── */
+.range-tools {
+  display: flex;
+  gap: 8px;
+  padding: 0 18px 8px;
+  max-width: 820px;
+  margin: 0 auto;
+}
+
+.stats-date-input {
+  flex: 1;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-2);
+  color: var(--text-1);
+  font-family: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.stats-date-input:hover {
+  border-color: var(--border-h);
+}
+
+.btn-export-xlsx {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 8px);
+  background: var(--bg-2);
+  color: var(--text-2);
+  font-family: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  white-space: nowrap;
+}
+
+.btn-export-xlsx:hover {
+  border-color: var(--border-h);
+  color: var(--text-1);
+  background: var(--accent-dim, var(--bg-2));
+}
+
 /* ── Stat Cards ───────────────────────────────────────────────────────── */
 .stats-grid {
   display: grid;
