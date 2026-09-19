@@ -210,16 +210,31 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
     return false;
   }
 
+  let coreSyncOk = true;
   try {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
     await firestoreWrite(session.uid, dailyTotals, ticketLog, settings, session.idToken);
-    
-    // Also write to the weekly + monthly leaderboards. These write the
-    // CURRENT (in-progress) period's running total — that's intentional:
-    // by the time that period ends, its document holds the final total,
-    // and the leaderboard always *reads* the last completed period (see
-    // GET_WEEKLY_LEADERBOARD / GET_MONTHLY_LEADERBOARD below), so nobody
-    // sees a still-in-progress total inflate their apparent rank mid-week.
+  } catch (e) {
+    console.error('[ZTK Cloud] ✗ Failed to push to Firestore:', e.message);
+    coreSyncOk = false;
+  }
+
+  // Also write to the weekly + monthly leaderboards. These write the
+  // CURRENT (in-progress) period's running total — that's intentional:
+  // by the time that period ends, its document holds the final total,
+  // and the leaderboard always *reads* the last completed period (see
+  // GET_WEEKLY_LEADERBOARD / GET_MONTHLY_LEADERBOARD below), so nobody
+  // sees a still-in-progress total inflate their apparent rank mid-week.
+  //
+  // This runs in its own try/catch, separate from the write above: the
+  // leaderboard is a nice-to-have social feature layered on top of the
+  // user's own ticket data, not the thing the web dashboard actually
+  // depends on. A leaderboard write failing (e.g. Firestore rules for
+  // /monthlyLeaderboard not yet published, or a transient error) must
+  // never make this function report the ENTIRE sync as failed when the
+  // user's own tracker document — the part that matters — already
+  // succeeded above.
+  try {
     const weekKey = getCurrentWeekKey();
     const weekTotal = getWeeklyTotal(dailyTotals);
     const weekPeakSpeed = getWeeklyPeakSpeed(dailyTotals, ticketLog);
@@ -248,12 +263,12 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
       monthPeakSpeed
     );
 
-    console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly/monthly leaderboards');
-    return true;
+    if (coreSyncOk) console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly/monthly leaderboards');
   } catch (e) {
-    console.error('[ZTK Cloud] ✗ Failed to push to Firestore:', e.message);
-    return false;
+    console.warn('[ZTK Cloud] ⚠ Leaderboard write failed (your own ticket data synced fine regardless):', e.message);
   }
+
+  return coreSyncOk;
 }
 
 // ── Cloud Sync: Pull from Firestore ───────────
