@@ -1506,11 +1506,29 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'SEND_XLSX_TO_SLACK':
           sendResponse(await sendXlsxToSlack(msg.base64Bytes, msg.filename));
           break;
-        case 'FORCE_SYNC':
+        case 'FORCE_SYNC': {
           lastCloudSyncTime = 0;
-          await pullFromCloud();
-          sendResponse({ success: true });
+          // Try silently first; if that fails, retry interactively — this is
+          // the one case where popping a Google consent window is expected,
+          // since the user just explicitly clicked "Force Sync." This is
+          // also the recovery path for the Google OAuth grant having quietly
+          // expired/been revoked in the background (getFirebaseSession(false)
+          // then fails everywhere silently — pushes, pulls, the popup's own
+          // "Synced to Google account" label never says otherwise), which
+          // otherwise has no way to surface to the user at all.
+          let session = await getFirebaseSession(false);
+          if (!session) session = await getFirebaseSession(true);
+          if (!session) {
+            sendResponse({ success: false, reason: 'auth' });
+            break;
+          }
+          const result = await pullFromCloud();
+          // pullFromCloud() returns null on failure (not configured, no
+          // session, or the Firestore request itself threw) — previously
+          // this response ignored that entirely and always claimed success.
+          sendResponse({ success: result !== null });
           break;
+        }
         case 'GET_DETAILED_STATS':
           sendResponse(await getDetailedStats(msg.range, msg.dateParam));
           break;

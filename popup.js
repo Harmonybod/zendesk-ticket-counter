@@ -706,12 +706,21 @@ if ($('slack-token-input')) $('slack-token-input').addEventListener('keydown', (
 if ($('slack-user-id-input')) $('slack-user-id-input').addEventListener('keydown', (e) => { if (e.key === 'Enter') $('save-slack-btn').click(); });
 
 // ── Force Sync ────────────────────────────────
+// FORCE_SYNC used to always sendResponse({success: true}) no matter what
+// actually happened — this button was the one place a user could notice
+// cloud sync had quietly stopped working (e.g. the Google grant expiring/
+// getting revoked in the background), and it always claimed success
+// anyway. It now reports the real outcome, including a distinct "auth"
+// reason so this points you at re-signing-in instead of a generic failure.
 $('force-sync-btn').addEventListener('click', () => {
     $('sync-status').textContent = '🔄 Syncing…';
     chrome.runtime.sendMessage({ action: 'FORCE_SYNC' }, (response) => {
-        if (chrome.runtime.lastError || !response) {
-            $('sync-status').textContent = '⚠️ Sync failed';
-            showToast('⚠ Sync failed');
+        if (chrome.runtime.lastError || !response || !response.success) {
+            const isAuthIssue = response && response.reason === 'auth';
+            $('sync-status').textContent = isAuthIssue
+                ? '⚠️ Sign-in expired — sign out and back in'
+                : '⚠️ Sync failed';
+            showToast(isAuthIssue ? '⚠ Google sign-in expired — please reconnect' : '⚠ Sync failed');
             return;
         }
         showToast('✓ Synced with cloud');
