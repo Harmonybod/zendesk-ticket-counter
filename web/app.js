@@ -168,17 +168,41 @@ $('signin-btn').addEventListener('click', async () => {
 
 $('signout-btn').addEventListener('click', () => signOut(auth));
 
+// ── Splash screen (session-restore + first-load sync feedback) ───────────
+// Firebase's onAuthStateChanged always fires at least once while it checks
+// IndexedDB for a persisted session — historically that gap showed the
+// "Sign in with Google" card even to an already-signed-in user, for as long
+// as that check took. The splash screen now covers that gap instead; the
+// auth screen only ever appears once Firebase has actually confirmed there
+// is no session (a genuine signed-out state, e.g. right after Sign out).
+let splashDismissed = false;
+function dismissSplash(withTick) {
+    if (splashDismissed) return;
+    splashDismissed = true;
+    const splash = $('splash-screen');
+    if (!splash) return;
+    const finish = () => { splash.hidden = true; };
+    if (withTick) {
+        splash.classList.add('tick');
+        setTimeout(() => splash.classList.add('fade-out'), 550);
+        setTimeout(finish, 900);
+    } else {
+        splash.classList.add('fade-out');
+        setTimeout(finish, 350);
+    }
+}
+
 onAuthStateChanged(auth, async (user) => {
     if (!user) {
-        $('auth-screen').hidden = false;
         $('app-main').hidden = true;
         currentUid = null;
         stopAutoRefresh();
+        dismissSplash(false);
+        $('auth-screen').hidden = false;
         return;
     }
 
     $('auth-screen').hidden = true;
-    $('app-main').hidden = false;
     $('user-name').textContent = user.displayName || user.email || '';
     currentUid = user.uid;
 
@@ -188,6 +212,8 @@ onAuthStateChanged(auth, async (user) => {
     loadLeaderboard(currentLbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
 
     startAutoRefresh();
+    $('app-main').hidden = false;
+    dismissSplash(true);
 });
 
 // ── Refresh (manual + auto) ─────────────────────

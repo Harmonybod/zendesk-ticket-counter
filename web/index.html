@@ -30,8 +30,30 @@
 </head>
 <body>
 
-  <!-- ── Sign-in screen ── -->
-  <div id="auth-screen" class="auth-screen">
+  <!-- ── Splash / session-restore screen ──
+       Shown first on every load while Firebase resolves whether this
+       browser already has a signed-in session. Most opens never saw the
+       sign-in screen at all before this existed — this is what covers that
+       brief resolve instead of flashing the "Sign in with Google" card at
+       an already-signed-in user. -->
+  <div id="splash-screen" class="splash-screen">
+    <div class="splash-logos" id="splash-logos">
+      <img src="icons/ticket_tracker_circle_badge_logo_darker.png" class="splash-logo" alt="" />
+      <img src="icons/ticket_tracker_circle_badge_logo_darker.png" class="splash-logo" alt="" />
+      <img src="icons/ticket_tracker_circle_badge_logo_darker.png" class="splash-logo" alt="" />
+    </div>
+    <div class="splash-check" id="splash-check" aria-hidden="true">
+      <svg viewBox="0 0 52 52">
+        <circle class="splash-check-circle" cx="26" cy="26" r="23" fill="none" />
+        <path class="splash-check-mark" fill="none" d="M14 27l7 7 16-16" />
+      </svg>
+    </div>
+    <p class="splash-text" id="splash-text">Syncing your data…</p>
+  </div>
+
+  <!-- ── Sign-in screen (only shown once Firebase confirms there's truly no
+       signed-in session — e.g. after Sign out) ── -->
+  <div id="auth-screen" class="auth-screen" hidden>
     <div class="auth-card">
       <img src="icons/ticket_tracker_circle_badge_logo_darker.png" class="auth-logo" alt="" />
       <h1>Ticket Tracker Dashboard</h1>
@@ -56,7 +78,14 @@
         </div>
       </div>
       <div class="header-actions">
-        <button id="refresh-btn" class="btn-theme" title="Refresh data from your extension">🔄</button>
+        <button id="refresh-btn" class="btn-theme" title="Refresh data from your extension">
+          <svg class="icon-refresh" viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 12a9 9 0 0 1-15.3 6.4L3 15.5" />
+            <path d="M3 12a9 9 0 0 1 15.3-6.4L21 8.5" />
+            <path d="M3 21v-5.5h5.5" />
+            <path d="M21 3v5.5h-5.5" />
+          </svg>
+        </button>
         <button id="theme-btn" class="btn-theme" title="Appearance">🎨</button>
         <button id="signout-btn" class="btn-signout">Sign out</button>
       </div>
