@@ -279,8 +279,12 @@ async function pullFromCloud() {
 
     if (!remoteData) {
       console.log('[ZTK Cloud] No data found in Firestore for this user — uploading local data');
-      // First time: push local data to cloud
-      await syncToCloud(localData.dailyTotals, localData.ticketLog, {
+      // First time: push local data to cloud. syncToCloud() catches its own
+      // errors and returns false rather than throwing, so this MUST check
+      // its result — previously it didn't, and this function returned
+      // localData.dailyTotals (a "success" value) even when that push
+      // silently failed, meaning nothing actually reached Firestore.
+      const pushOk = await syncToCloud(localData.dailyTotals, localData.ticketLog, {
         masterLogHistory: localData.masterLogHistory,
         ticketPayeeIssues: localData.ticketPayeeIssues,
         agentName: localData.agentName,
@@ -289,7 +293,7 @@ async function pullFromCloud() {
         shiftConfig: localData.shiftConfig,
         weeklyShiftConfig: localData.weeklyShiftConfig
       });
-      return localData.dailyTotals;
+      return pushOk ? localData.dailyTotals : null;
     }
 
     // Merge ticketLog and masterLogHistory: union of all unique entries —
@@ -338,7 +342,13 @@ async function pullFromCloud() {
 
     if (changed) {
       console.log('[ZTK Cloud] Local had data not in cloud, pushing merged result back');
-      await syncToCloud(merged, mergedLog, {
+      // syncToCloud() swallows its own errors and returns false rather than
+      // throwing — this MUST be checked. Previously it wasn't, so a device
+      // with new tickets not yet in Firestore (exactly the "today's tickets
+      // don't show on the web dashboard" case) could have this push fail
+      // silently while pullFromCloud() still returned merged (a "success"
+      // value) below, making Force Sync falsely report success.
+      const pushOk = await syncToCloud(merged, mergedLog, {
         masterLogHistory: mergedHistory,
         ticketPayeeIssues: mergedPayeeIssues,
         agentName: updates.agentName || localData.agentName,
@@ -347,6 +357,10 @@ async function pullFromCloud() {
         shiftConfig: updates.shiftConfig || localData.shiftConfig,
         weeklyShiftConfig: updates.weeklyShiftConfig || localData.weeklyShiftConfig
       });
+      if (!pushOk) {
+        console.error('[ZTK Cloud] ✗ Failed to push merged result back to Firestore');
+        return null;
+      }
     }
 
     const localDays = Object.keys(localData.dailyTotals).length;
