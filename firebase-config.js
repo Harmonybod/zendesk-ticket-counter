@@ -172,6 +172,71 @@ async function getUserProfile() {
 
 // ── Firestore Document Helpers ────────────────
 
+// ── Keeping the tracker document under Firestore's 1 MiB cap ─────────────
+// A single Firestore document maxes out at 1,048,576 bytes. ticketLog and
+// masterLogHistory are append-only and grow forever locally by design (the
+// extension's own popup reads full local history, and local storage has
+// plenty of headroom) — but pushed to Firestore in full, they eventually
+// cross that cap, and EVERY write after that point gets flatly rejected
+// with no visible symptom (the popup keeps counting fine locally; only the
+// cloud copy — and so the web dashboard, and any other device — silently
+// stops receiving new tickets). dailyTotals (one compact
+// {open,new,team,compliance,escalation,closed} object per day) is kept in
+// full forever regardless — it's tiny even after years, and it's the
+// durable source of all-time totals and the rank/level system — so no
+// historical total is ever lost by trimming the detail arrays below.
+const FIRESTORE_DOC_SAFE_BYTES = 900000; // hard cap is 1,048,576 — stay well clear of it
+const CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS = [90, 60, 30, 14, 7];
+
+function utf8ByteLength(str) {
+  return new TextEncoder().encode(str).length;
+}
+
+// Keeps only ticketLog/masterLogHistory/ticketPayeeIssues entries from the
+// last `days` days. ticketPayeeIssues has no date of its own, so an entry
+// is kept only if its ticket is still present in the trimmed ticketLog —
+// otherwise it's dead weight for a ticket that's already aged out.
+function windowTicketDataForCloud(ticketLog, settings, days) {
+  const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
+  const trimmedTicketLog = (ticketLog || []).filter(e => e.timestamp >= cutoff);
+  const trimmedMasterLogHistory = (settings.masterLogHistory || []).filter(e => {
+    const t = Date.parse(e.timestamp);
+    return Number.isFinite(t) ? t >= cutoff : true; // keep anything unparsable rather than risk losing it silently
+  });
+  const keepTicketIds = new Set(trimmedTicketLog.map(e => String(e.ticketNumber)));
+  const trimmedPayeeIssues = {};
+  Object.entries(settings.ticketPayeeIssues || {}).forEach(([id, issue]) => {
+    if (keepTicketIds.has(String(id))) trimmedPayeeIssues[id] = issue;
+  });
+  return {
+    ticketLog: trimmedTicketLog,
+    settings: { ...settings, masterLogHistory: trimmedMasterLogHistory, ticketPayeeIssues: trimmedPayeeIssues }
+  };
+}
+
+// Shrinks the history window step by step until the resulting document
+// fits comfortably under Firestore's cap. dailyTotals is never trimmed —
+// only the per-ticket detail arrays, which is exactly what grows unbounded.
+function fitTicketDataForCloud(dailyTotals, ticketLog, settings) {
+  let candidate = { ticketLog: ticketLog || [], settings };
+  for (const days of CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS) {
+    const windowed = windowTicketDataForCloud(ticketLog, settings, days);
+    const bytes = utf8ByteLength(JSON.stringify(toFirestoreDoc(dailyTotals, windowed.ticketLog, windowed.settings)));
+    candidate = windowed;
+    if (bytes <= FIRESTORE_DOC_SAFE_BYTES) {
+      if (days < CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS[0]) {
+        console.warn(`[ZTK Cloud] Trimmed cloud ticket history to the last ${days} days (~${bytes} bytes) to stay under Firestore's 1MB document limit. Full history is unaffected locally.`);
+      }
+      return windowed;
+    }
+  }
+  // Even the smallest window doesn't fit — pathological ticket volume in a
+  // single week. Sync that smallest window anyway; a partial cloud sync
+  // beats none, and dailyTotals (all-time totals) is untouched either way.
+  console.warn('[ZTK Cloud] Even the smallest history window exceeds Firestore\'s size limit — syncing it anyway.');
+  return candidate;
+}
+
 /**
  * Convert a JS object of dailyTotals into Firestore REST document format.
  * Input:  { "2026-03-13": { open: 5, new: 3, team: 2 } }
@@ -331,7 +396,11 @@ function mergeTicketPayeeIssues(local, remote) {
  */
 async function firestoreWrite(uid, dailyTotals, ticketLog, settings, idToken) {
   const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/data/tracker`;
-  const body = toFirestoreDoc(dailyTotals, ticketLog, settings);
+  // Window the per-ticket detail arrays to whatever recent history fits
+  // under Firestore's 1MB document cap — see fitTicketDataForCloud above.
+  // dailyTotals (all-time totals) is passed through untouched either way.
+  const fitted = fitTicketDataForCloud(dailyTotals, ticketLog, settings);
+  const body = toFirestoreDoc(dailyTotals, fitted.ticketLog, fitted.settings);
 
   const headers = { 'Content-Type': 'application/json' };
   if (idToken) {
