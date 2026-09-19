@@ -450,6 +450,17 @@ h1, h2 { font-weight: 700; }
   background: var(--bg-card-h);
 }
 
+/* Spins #refresh-btn's icon while a manual/auto refresh is in flight —
+   the only feedback the button gives since the fetch itself is quick. */
+@keyframes btn-refresh-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.btn-theme.is-refreshing {
+  animation: btn-refresh-spin 0.7s linear infinite;
+}
+
 .btn-signout {
   background: var(--bg-2);
   border: 1px solid var(--border);

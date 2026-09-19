@@ -134,6 +134,16 @@ let userData = null; // { dailyTotals, ticketLog, masterLogHistory, ticketPayeeI
 let currentLbPeriod = 'week';
 let currentLbCategory = 'tickets'; // 'tickets' | 'speed'
 
+// Firestore is only ever fetched on sign-in / a manual or timed refresh —
+// there's no realtime listener — so without this a ticket logged in the
+// extension after the dashboard tab was opened would just never appear
+// until the whole page was reloaded. currentUid + autoRefreshTimer drive
+// the periodic re-fetch below.
+let currentUid = null;
+let autoRefreshTimer = null;
+let isRefreshing = false;
+const AUTO_REFRESH_INTERVAL_MS = 60 * 1000;
+
 // ── Auth ────────────────────────────────────────
 $('signin-btn').addEventListener('click', async () => {
     $('auth-error').hidden = true;
@@ -162,18 +172,67 @@ onAuthStateChanged(auth, async (user) => {
     if (!user) {
         $('auth-screen').hidden = false;
         $('app-main').hidden = true;
+        currentUid = null;
+        stopAutoRefresh();
         return;
     }
 
     $('auth-screen').hidden = true;
     $('app-main').hidden = false;
     $('user-name').textContent = user.displayName || user.email || '';
+    currentUid = user.uid;
 
     await loadUserData(user.uid);
     renderAll();
 
     loadLeaderboard(currentLbPeriod).catch(e => console.warn('[TT Dashboard] Leaderboard load failed:', e.message));
+
+    startAutoRefresh();
 });
+
+// ── Refresh (manual + auto) ─────────────────────
+// Re-pulls this user's doc from Firestore and re-renders everything, so
+// tickets logged from the extension after this tab was opened actually
+// show up without the user having to hit their browser's reload.
+async function refreshData() {
+    if (!currentUid || isRefreshing) return;
+    isRefreshing = true;
+    const btn = $('refresh-btn');
+    if (btn) btn.classList.add('is-refreshing');
+    try {
+        await loadUserData(currentUid);
+        renderAll();
+        await loadLeaderboard(currentLbPeriod);
+    } catch (e) {
+        console.warn('[TT Dashboard] Refresh failed:', e.message);
+    } finally {
+        isRefreshing = false;
+        if (btn) btn.classList.remove('is-refreshing');
+    }
+}
+
+function startAutoRefresh() {
+    stopAutoRefresh();
+    autoRefreshTimer = setInterval(() => {
+        // Skip ticks while the tab is backgrounded — the visibilitychange
+        // handler below catches up with one refresh as soon as it's shown
+        // again instead of burning fetches on a tab nobody's looking at.
+        if (document.visibilityState === 'visible') refreshData();
+    }, AUTO_REFRESH_INTERVAL_MS);
+}
+
+function stopAutoRefresh() {
+    if (autoRefreshTimer) {
+        clearInterval(autoRefreshTimer);
+        autoRefreshTimer = null;
+    }
+}
+
+document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && currentUid) refreshData();
+});
+
+if ($('refresh-btn')) $('refresh-btn').addEventListener('click', () => refreshData());
 
 // ── Firestore Reads ─────────────────────────────
 async function loadUserData(uid) {
@@ -962,7 +1021,7 @@ function getHeaderColorForCount(count) {
     if (count >= 70) return '2E86C1';
     if (count >= 60) return '00B0F0';
     if (count >= 45) return '1D8348';
-    if (count >= 30) return 'A9DFBF';
+    if (count >= 30) return '1CED71';
     if (count >= 15) return 'F1C40F';
     return 'ED7D31';
 }

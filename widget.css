@@ -1067,9 +1067,10 @@
   background-image: url('data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><path d="M20 3 L17 13 L7 10 M17 13 L23 19 L35 15 M23 19 L15 29 L19 37 M23 19 L31 31 M15 29 L6 33 M20 3 L25 8 M7 10 L2 14 M35 15 L38 20 M19 37 L23 39 M31 31 L36 34 M6 33 L2 36" stroke="white" stroke-width="1.3" fill="none"/></svg>');
 }
 
-/* A brief white "pop" the instant the glass actually breaks (cracking ->
-   smoke transition) — plays once via the CSS animation restarting whenever
-   data-fx-stage newly becomes "smoke", then fades away on its own. */
+/* A brief white "pop" at the moment the flame arrives — the fully-cracked
+   glass finally shatters and is blown away, leaving only fire. Plays once via
+   the CSS animation restarting whenever data-fx-stage newly becomes "fire",
+   then fades away on its own. */
 .fx-shatter {
   background: radial-gradient(circle, rgba(255, 255, 255, 0.95) 0%, rgba(255, 255, 255, 0.5) 35%, rgba(255, 255, 255, 0) 70%);
   opacity: 0;
@@ -1082,7 +1083,8 @@
   100% { opacity: 0;   transform: scale(1.6); }
 }
 
-.zd-btn[data-fx-stage="smoke"] .fx-shatter {
+.zd-btn[data-fx-stage="fire"] .fx-shatter,
+.zd-btn.fx-no-fire[data-fx-stage="buzzer"] .fx-shatter {
   animation: zd-fx-shatter-burst 0.5s ease-out;
 }
 
@@ -1253,9 +1255,9 @@
   opacity: calc(clamp(0, (var(--fx-progress, 0) - 0.55) / 0.45, 1) * 0.85);
 }
 
-/* Once the glass has actually broken (smoke onward), all three crack
-   layers stay fully shown and the button itself reads brighter overall —
-   "after the glass is broken, the color of the widget is brighter". */
+/* Once the glass has actually broken (smoke onward), the button itself reads
+   brighter overall — "after the glass is broken, the color of the widget is
+   brighter". */
 .zd-btn[data-fx-stage="smoke"],
 .zd-btn[data-fx-stage="fire"],
 .zd-btn[data-fx-stage="buzzer"],
@@ -1263,11 +1265,21 @@
   filter: brightness(1.3) saturate(1.15);
 }
 
-.zd-btn[data-fx-stage="smoke"] .fx-crack,
+/* The cracks hold at full through the smoke stage — the glass is broken but
+   still in place. */
+.zd-btn[data-fx-stage="smoke"] .fx-crack {
+  opacity: 0.85;
+}
+
+/* ...and then the flame shatters them away for good. From "fire" onward the
+   crack lines are gone and only the flame (then buzzer, then crown) shows.
+   The short delay lets the shatter burst peak first, so the lines read as
+   being blown out by the break rather than quietly fading. */
 .zd-btn[data-fx-stage="fire"] .fx-crack,
 .zd-btn[data-fx-stage="buzzer"] .fx-crack,
 .zd-btn[data-fx-stage="crowned"] .fx-crack {
-  opacity: 0.85;
+  opacity: 0;
+  transition: opacity 0.3s ease 0.12s;
 }
 
 .zd-btn[data-fx-stage="smoke"] .fx-smoke::before,

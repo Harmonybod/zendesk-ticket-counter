@@ -300,7 +300,7 @@
     const LEVELS = [
         { level: 1, name: 'Novice', min: 0, color: '#ED7D31' },
         { level: 2, name: 'Initiate', min: 15, color: '#F1C40F' },
-        { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF' },
+        { level: 3, name: 'Apprentice', min: 30, color: '#1CED71' },
         { level: 4, name: 'Adept', min: 45, color: '#1D8348' },
         { level: 5, name: 'Elite', min: 60, color: '#00B0F0' },
         { level: 6, name: 'Veteran', min: 70, color: '#2E86C1' },
@@ -463,6 +463,10 @@
                     const tintDark = mixHexColors(base, '#000000', 0.22);
                     const fxProfile = BUTTON_FX_PROFILES[c.type];
                     const buzzerColor = fxProfile ? fxProfile.buzzerColor : '#ffd700';
+                    // Categories with no fire stage (Compliance) go smoke -> buzzer, so
+                    // the shatter that normally fires with the flame has to be triggered
+                    // off their buzzer instead. CSS keys that off this class.
+                    const noFireCls = fxProfile && fxProfile.fireStart == null ? ' fx-no-fire' : '';
                     const styleAttr = ` style="background: linear-gradient(135deg, ${tintLight} 0%, ${tintDark} 100%); --fx-buzzer-color: ${buzzerColor};"`;
                     const label = isCircle ? '' : c.label;
                     const circleCls = isCircle ? ' circle-mode' : '';
@@ -478,7 +482,7 @@
               <span class="fx-buzzer"></span>
             </span>`;
                     return `<span class="zd-btn-slot${circleCls}">
-            <button class="zd-btn ${c.cls}${circleCls}" data-type="${c.type}" title="${c.title}"${styleAttr} data-fx-stage="glass">${label}${fxHtml}</button>
+            <button class="zd-btn ${c.cls}${circleCls}${noFireCls}" data-type="${c.type}" title="${c.title}"${styleAttr} data-fx-stage="glass">${label}${fxHtml}</button>
             <span class="fx-crown" aria-hidden="true">👑</span>
             <span class="zd-count-badge" aria-hidden="true">0</span>
           </span>`;

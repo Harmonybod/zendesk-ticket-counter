@@ -67,7 +67,7 @@ function normalizeThemeKey(theme) {
 const LEVELS = [
     { level: 1, name: 'Novice', min: 0, color: '#ED7D31', tagline: 'Just getting started' },
     { level: 2, name: 'Initiate', min: 15, color: '#F1C40F', tagline: 'Finding your rhythm' },
-    { level: 3, name: 'Apprentice', min: 30, color: '#A9DFBF', tagline: 'Building momentum' },
+    { level: 3, name: 'Apprentice', min: 30, color: '#1CED71', tagline: 'Building momentum' },
     { level: 4, name: 'Adept', min: 45, color: '#1D8348', tagline: 'Skilled and steady' },
     { level: 5, name: 'Elite', min: 60, color: '#00B0F0', tagline: 'Among the best' },
     { level: 6, name: 'Veteran', min: 70, color: '#2E86C1', tagline: 'Battle-tested' },
@@ -492,12 +492,20 @@ function applySettingsUI() {
     if ($('slack-user-id-input')) $('slack-user-id-input').value = stats.slackUserId || '';
     if ($('slack-status')) $('slack-status').textContent = (stats.slackToken && stats.slackUserId) ? '✓ Slack connected' : '';
 
-    // Shift Config
-    if (stats.shiftConfig) {
-        if ($('shift-type-input')) $('shift-type-input').value = stats.shiftConfig.shiftType || 'Day';
-        if ($('shift-start-input')) $('shift-start-input').value = stats.shiftConfig.shiftStart || '';
-        if ($('shift-end-input')) $('shift-end-input').value = stats.shiftConfig.shiftEnd || '';
-        if ($('shift-remarks-input')) $('shift-remarks-input').value = stats.shiftConfig.shiftRemarks || '';
+    // Shift Config — resolveTodaysShiftFields() is what makes today's saved
+    // weekly template stick: this runs on EVERY stats reload (every ticket
+    // click reloads stats), and it used to always stamp the raw saved
+    // shiftConfig over the fields no matter what, silently undoing the
+    // weekly auto-fill a moment after it was applied. That's why the
+    // schedule only ever seemed to "take" right after manually hitting
+    // Save in the weekly-shift modal — that save re-applies it *after* this
+    // clobbering already happened once at popup load.
+    if (stats.shiftConfig || weeklyShiftConfigCache) {
+        const fields = resolveTodaysShiftFields(stats.shiftConfig);
+        if ($('shift-type-input')) $('shift-type-input').value = fields.shiftType;
+        if ($('shift-start-input')) $('shift-start-input').value = fields.shiftStart;
+        if ($('shift-end-input')) $('shift-end-input').value = fields.shiftEnd;
+        if ($('shift-remarks-input')) $('shift-remarks-input').value = stats.shiftConfig?.shiftRemarks || '';
     }
 }
 
@@ -1720,7 +1728,7 @@ function getHeaderColorForCount(count) {
     if (count >= 70) return '2E86C1'; // Blue
     if (count >= 60) return '00B0F0'; // Light Blue
     if (count >= 45) return '1D8348'; // Dark Green
-    if (count >= 30) return 'A9DFBF'; // Light Green
+    if (count >= 30) return '1CED71'; // Green
     if (count >= 15) return 'F1C40F'; // Yellow
     return 'ED7D31'; // Orange
 }
@@ -2714,21 +2722,38 @@ if ($('weekly-shift-save')) {
     });
 }
 
+// Resolves what the Type/Start/End fields should show RIGHT NOW: today's
+// weekly-template entry (weeklyShiftConfigCache) wins unless the user has
+// already manually edited today's fields (shiftConfig.savedDateKey ===
+// today), in which case that manual edit wins instead. Shared by
+// applySettingsUI — which re-runs on every stats reload, i.e. every ticket
+// click — and applyTodaysWeeklyShiftIfNeeded, so neither path can silently
+// clobber the other's idea of what today's fields should be.
+function resolveTodaysShiftFields(shiftConfig) {
+    const todayDow = DOW_NAMES[new Date().getDay()];
+    const wd = weeklyShiftConfigCache ? weeklyShiftConfigCache[todayDow] : null;
+    const todayKey = fmtDateKey(new Date());
+    const manualToday = shiftConfig && shiftConfig.savedDateKey === todayKey;
+    if (wd && !manualToday) {
+        return { shiftType: wd.type || 'Day', shiftStart: wd.start || '', shiftEnd: wd.end || '' };
+    }
+    return {
+        shiftType: shiftConfig?.shiftType || 'Day',
+        shiftStart: shiftConfig?.shiftStart || '',
+        shiftEnd: shiftConfig?.shiftEnd || ''
+    };
+}
+
 // Auto-fills today's visible Start/End/Type fields from the weekly
 // template — unless the user already manually edited those fields today
 // (tracked via shiftConfig.savedDateKey), in which case that edit wins.
 function applyTodaysWeeklyShiftIfNeeded() {
     if (!weeklyShiftConfigCache) return;
-    const todayDow = DOW_NAMES[new Date().getDay()];
-    const wd = weeklyShiftConfigCache[todayDow];
-    if (!wd) return;
-    const todayKey = fmtDateKey(new Date());
     chrome.storage.local.get(['shiftConfig'], (res) => {
-        const manualToday = res.shiftConfig && res.shiftConfig.savedDateKey === todayKey;
-        if (manualToday) return;
-        if ($('shift-type-input')) $('shift-type-input').value = wd.type || 'Day';
-        if ($('shift-start-input')) $('shift-start-input').value = wd.start || '';
-        if ($('shift-end-input')) $('shift-end-input').value = wd.end || '';
+        const fields = resolveTodaysShiftFields(res.shiftConfig);
+        if ($('shift-type-input')) $('shift-type-input').value = fields.shiftType;
+        if ($('shift-start-input')) $('shift-start-input').value = fields.shiftStart;
+        if ($('shift-end-input')) $('shift-end-input').value = fields.shiftEnd;
     });
 }
 
