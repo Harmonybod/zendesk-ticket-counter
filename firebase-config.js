@@ -13,6 +13,10 @@ const FIREBASE_CONFIG = {
 // ── Firestore REST API Helpers ────────────────
 
 const FIRESTORE_BASE = `https://firestore.googleapis.com/v1/projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`;
+// Same path, without the transport (https://.../v1/) prefix — this is the
+// "resource name" format Firestore's :batchGet body needs for each document
+// it's asked for (a plain URL there is silently rejected as not found).
+const FIRESTORE_RESOURCE_BASE = `projects/${FIREBASE_CONFIG.projectId}/databases/(default)/documents`;
 
 // ── Auth Constants ────────────────────────────
 
@@ -173,18 +177,20 @@ async function getUserProfile() {
 // ── Firestore Document Helpers ────────────────
 
 // ── Keeping the tracker document under Firestore's 1 MiB cap ─────────────
-// A single Firestore document maxes out at 1,048,576 bytes. ticketLog and
-// masterLogHistory are append-only and grow forever locally by design (the
-// extension's own popup reads full local history, and local storage has
-// plenty of headroom) — but pushed to Firestore in full, they eventually
-// cross that cap, and EVERY write after that point gets flatly rejected
-// with no visible symptom (the popup keeps counting fine locally; only the
-// cloud copy — and so the web dashboard, and any other device — silently
-// stops receiving new tickets). dailyTotals (one compact
-// {open,new,team,compliance,escalation,closed} object per day) is kept in
-// full forever regardless — it's tiny even after years, and it's the
-// durable source of all-time totals and the rank/level system — so no
-// historical total is ever lost by trimming the detail arrays below.
+// A single Firestore document maxes out at 1,048,576 bytes. ticketLog used
+// to be embedded in this same document and is append-only/unbounded — that
+// is exactly what silently broke every cloud write once real usage crossed
+// the cap (the popup kept counting fine locally; only the cloud copy, and
+// so the web dashboard, ever stopped receiving new tickets). ticketLog now
+// lives in its own per-day subcollection instead (see "Full ticketLog
+// history via a per-day subcollection" below), which has no realistic size
+// ceiling — a single day's worth of tickets is nowhere near 1MB on its own,
+// and a subcollection can hold any number of such small documents.
+//
+// masterLogHistory (a smaller, largely-legacy duplicate of ticketLog kept
+// for backward compatibility — see popup.js's renderPremiumAnalytics) is
+// still windowed here as a defensive fallback: dailyTotals (the durable,
+// tiny, all-time source of totals) is never trimmed, only the detail array.
 const FIRESTORE_DOC_SAFE_BYTES = 900000; // hard cap is 1,048,576 — stay well clear of it
 const CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS = [90, 60, 30, 14, 7];
 
@@ -192,61 +198,59 @@ function utf8ByteLength(str) {
   return new TextEncoder().encode(str).length;
 }
 
-// Keeps only ticketLog/masterLogHistory/ticketPayeeIssues entries from the
-// last `days` days. ticketPayeeIssues has no date of its own, so an entry
-// is kept only if its ticket is still present in the trimmed ticketLog —
-// otherwise it's dead weight for a ticket that's already aged out.
-function windowTicketDataForCloud(ticketLog, settings, days) {
+// Self-contained "YYYY-MM-DD" formatter (matches ticketLog entries' own
+// `date` field and background.js's identical dateKey()) — kept local to
+// this file rather than relying on background.js's global, since this file
+// is only ever loaded via background.js's importScripts() today but
+// shouldn't silently depend on that happening to also define this name.
+function localDateKeyForCloud(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+// Keeps only masterLogHistory entries from the last `days` days.
+function windowMasterLogForCloud(settings, days) {
   const cutoff = Date.now() - days * 24 * 60 * 60 * 1000;
-  const trimmedTicketLog = (ticketLog || []).filter(e => e.timestamp >= cutoff);
   const trimmedMasterLogHistory = (settings.masterLogHistory || []).filter(e => {
     const t = Date.parse(e.timestamp);
     return Number.isFinite(t) ? t >= cutoff : true; // keep anything unparsable rather than risk losing it silently
   });
-  const keepTicketIds = new Set(trimmedTicketLog.map(e => String(e.ticketNumber)));
-  const trimmedPayeeIssues = {};
-  Object.entries(settings.ticketPayeeIssues || {}).forEach(([id, issue]) => {
-    if (keepTicketIds.has(String(id))) trimmedPayeeIssues[id] = issue;
-  });
-  return {
-    ticketLog: trimmedTicketLog,
-    settings: { ...settings, masterLogHistory: trimmedMasterLogHistory, ticketPayeeIssues: trimmedPayeeIssues }
-  };
+  return { ...settings, masterLogHistory: trimmedMasterLogHistory };
 }
 
-// Shrinks the history window step by step until the resulting document
-// fits comfortably under Firestore's cap. dailyTotals is never trimmed —
-// only the per-ticket detail arrays, which is exactly what grows unbounded.
-function fitTicketDataForCloud(dailyTotals, ticketLog, settings) {
-  let candidate = { ticketLog: ticketLog || [], settings };
+// Shrinks masterLogHistory's window step by step until the resulting main
+// document fits comfortably under Firestore's cap. dailyTotals and
+// ticketPayeeIssues are never trimmed — they stay small on their own even
+// after years (one compact object per day; one short string per ticket).
+function fitSettingsForCloud(dailyTotals, settings) {
+  let candidate = settings;
   for (const days of CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS) {
-    const windowed = windowTicketDataForCloud(ticketLog, settings, days);
-    const bytes = utf8ByteLength(JSON.stringify(toFirestoreDoc(dailyTotals, windowed.ticketLog, windowed.settings)));
+    const windowed = windowMasterLogForCloud(settings, days);
+    const bytes = utf8ByteLength(JSON.stringify(toFirestoreDoc(dailyTotals, windowed)));
     candidate = windowed;
     if (bytes <= FIRESTORE_DOC_SAFE_BYTES) {
       if (days < CLOUD_HISTORY_WINDOW_CANDIDATES_DAYS[0]) {
-        console.warn(`[ZTK Cloud] Trimmed cloud ticket history to the last ${days} days (~${bytes} bytes) to stay under Firestore's 1MB document limit. Full history is unaffected locally.`);
+        console.warn(`[ZTK Cloud] Trimmed cloud masterLogHistory to the last ${days} days (~${bytes} bytes) to stay under Firestore's 1MB document limit. Full history is unaffected locally.`);
       }
       return windowed;
     }
   }
-  // Even the smallest window doesn't fit — pathological ticket volume in a
-  // single week. Sync that smallest window anyway; a partial cloud sync
-  // beats none, and dailyTotals (all-time totals) is untouched either way.
-  console.warn('[ZTK Cloud] Even the smallest history window exceeds Firestore\'s size limit — syncing it anyway.');
+  console.warn('[ZTK Cloud] Even the smallest masterLogHistory window exceeds Firestore\'s size limit — syncing it anyway.');
   return candidate;
 }
 
 /**
  * Convert a JS object of dailyTotals into Firestore REST document format.
- * Input:  { "2026-03-13": { open: 5, new: 3, team: 2 } }
- * Output: Firestore-compatible fields object
+ * ticketLog is NOT part of this document — see the ticketLogDays
+ * subcollection helpers below. Input dailyTotals example:
+ * { "2026-03-13": { open: 5, new: 3, team: 2 } }
  */
-function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
+function toFirestoreDoc(dailyTotals, settings = {}) {
   return {
     fields: {
       dailyTotalsJson: { stringValue: JSON.stringify(dailyTotals) },
-      ticketLogJson:   { stringValue: JSON.stringify(ticketLog || []) },
       masterLogHistoryJson: { stringValue: JSON.stringify(settings.masterLogHistory || []) },
       ticketPayeeIssuesJson: { stringValue: JSON.stringify(settings.ticketPayeeIssues || {}) },
       shiftConfigJson: { stringValue: JSON.stringify(settings.shiftConfig || null) },
@@ -257,6 +261,149 @@ function toFirestoreDoc(dailyTotals, ticketLog, settings = {}) {
       lastUpdated: { integerValue: String(Date.now()) }
     }
   };
+}
+
+// ── Full ticketLog history via a per-day subcollection ────────────────────
+// Each calendar day's ticketLog entries live in their own small document at
+// /users/{uid}/ticketLogDays/{date} (date is a "YYYY-MM-DD" key, matching
+// each entry's own `date` field). A subcollection can hold any number of
+// these without ever approaching the 1MB single-document cap, which is
+// what makes it safe to keep FULL history in the cloud indefinitely instead
+// of windowing it like the main document's other fields.
+//
+// Reads are still bounded on purpose: LISTING the whole subcollection would
+// itself grow unbounded over months/years of daily documents, and every
+// document in that list counts against Firestore's daily READ quota — so
+// routine reconciliation only ever reads/rewrites the last
+// CLOUD_TICKETLOG_WINDOW_DAYS days via a single :batchGet call (a fixed,
+// small cost no matter how long this account has existed). The one
+// deliberate exception is the FIRST-ever sync for a brand new remote
+// document, which backfills a user's complete local history once (see
+// pullFromCloud's "no remote data yet" branch) — a one-time cost, after
+// which everything older than the window is already correctly in Firestore
+// and — being an append-only log of already-finished days — never needs
+// touching again.
+const CLOUD_TICKETLOG_WINDOW_DAYS = 90;
+
+function recentDateKeys(days) {
+  const keys = [];
+  const now = new Date();
+  for (let i = 0; i < days; i++) {
+    const d = new Date(now);
+    d.setDate(now.getDate() - i);
+    keys.push(localDateKeyForCloud(d));
+  }
+  return keys;
+}
+
+function groupTicketLogByDay(ticketLog) {
+  const byDay = new Map();
+  (ticketLog || []).forEach(entry => {
+    if (!entry || !entry.date) return;
+    if (!byDay.has(entry.date)) byDay.set(entry.date, []);
+    byDay.get(entry.date).push(entry);
+  });
+  return byDay;
+}
+
+// Merges `localEntriesForDay` into whatever's already remote for that one
+// day, then writes the merged result back — never done as a blind
+// overwrite, so this can't regress another device's entries for the same
+// day. Skips the write entirely if nothing actually changed. Used by the
+// regular per-action sync path, which in practice only ever touches
+// "today" — so a normal ticket click costs one small targeted read +
+// (usually) one small write, not a scan of the whole history.
+async function syncTicketLogDay(uid, idToken, date, localEntriesForDay) {
+  const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/ticketLogDays/${encodeURIComponent(date)}`;
+  const headers = { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) };
+
+  let remoteEntries = [];
+  const getResp = await fetch(url, { method: 'GET', headers });
+  if (getResp.ok) {
+    const doc = await getResp.json();
+    try { remoteEntries = JSON.parse(doc.fields?.entriesJson?.stringValue || '[]'); } catch (e) { /* treat as empty */ }
+  } else if (getResp.status !== 404) {
+    const errorText = await getResp.text();
+    throw new Error(`ticketLogDays read failed for ${date} (${getResp.status}): ${errorText}`);
+  }
+
+  const merged = mergeTicketLogs(localEntriesForDay, remoteEntries);
+  if (merged.length === remoteEntries.length) return merged; // nothing new for this day
+
+  const body = { fields: { date: { stringValue: date }, entriesJson: { stringValue: JSON.stringify(merged) } } };
+  const putResp = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) });
+  if (!putResp.ok) {
+    const errorText = await putResp.text();
+    throw new Error(`ticketLogDays write failed for ${date} (${putResp.status}): ${errorText}`);
+  }
+  return merged;
+}
+
+// Reads the last `days` days' worth of ticketLogDays documents via a
+// single :batchGet call (exact document paths, computed locally — not a
+// collection listing) — a fixed, bounded number of reads no matter how
+// much total history exists. Returns their union as one flat ticketLog
+// array, the same shape every existing caller already expects.
+async function firestoreReadRecentTicketLogDays(uid, idToken, days = CLOUD_TICKETLOG_WINDOW_DAYS) {
+  const documents = recentDateKeys(days).map(
+    d => `${FIRESTORE_RESOURCE_BASE}/users/${encodeURIComponent(uid)}/ticketLogDays/${encodeURIComponent(d)}`
+  );
+  const headers = { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) };
+
+  const response = await fetch(`${FIRESTORE_BASE}:batchGet`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({ documents })
+  });
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`ticketLogDays batchGet failed (${response.status}): ${errorText}`);
+  }
+
+  const results = await response.json(); // array of { found?: {...} } | { missing?: "..." }
+  const all = [];
+  (results || []).forEach(r => {
+    if (!r || !r.found) return;
+    try {
+      all.push(...JSON.parse(r.found.fields?.entriesJson?.stringValue || '[]'));
+    } catch (e) {
+      console.warn('[ZTK Firebase] Failed to parse a ticketLogDays document:', e.message);
+    }
+  });
+  return all;
+}
+
+// Used after a full pull+merge (pullFromCloud): mergedTicketLog is already
+// the union of every device's history, so for any given day IT COVERS, it's
+// always a superset of (or equal to) what's remote — safe to write straight
+// over, unlike a raw local-only array. Only days within `windowDays` of
+// today are considered (matching whatever window remoteTicketLogFlat was
+// actually read with) — anything older is left alone entirely, since we
+// have no reliable remote-side information about it to safely diff against
+// without re-reading it (which is exactly the unbounded cost this design
+// avoids). Pass windowDays = Infinity for the one legitimate case where
+// that's not true: the first-ever backfill of a brand new remote document,
+// where remoteTicketLogFlat is `[]` for everything by definition.
+async function pushChangedTicketLogDays(uid, idToken, mergedTicketLog, remoteTicketLogFlat, windowDays = CLOUD_TICKETLOG_WINDOW_DAYS) {
+  const cutoffKey = Number.isFinite(windowDays)
+    ? localDateKeyForCloud(new Date(Date.now() - windowDays * 24 * 60 * 60 * 1000))
+    : null;
+  const mergedByDay = groupTicketLogByDay(mergedTicketLog);
+  const remoteByDay = groupTicketLogByDay(remoteTicketLogFlat);
+  const headers = { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) };
+
+  for (const [day, entries] of mergedByDay) {
+    if (cutoffKey && day < cutoffKey) continue; // outside the window we actually read remote for — leave it alone
+    const remoteEntries = remoteByDay.get(day) || [];
+    if (entries.length === remoteEntries.length) continue; // unchanged for this day
+    const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/ticketLogDays/${encodeURIComponent(day)}`;
+    const body = { fields: { date: { stringValue: day }, entriesJson: { stringValue: JSON.stringify(entries) } } };
+    const response = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`ticketLogDays write failed for ${day} (${response.status}): ${errorText}`);
+    }
+  }
 }
 
 /**
@@ -387,20 +534,23 @@ function mergeTicketPayeeIssues(local, remote) {
 
 /**
  * Write a document to Firestore using Firebase ID token auth.
- * Path: /users/{uid}/data/tracker
+ * Path: /users/{uid}/data/tracker (dailyTotals + settings) plus today's
+ * bucket in /users/{uid}/ticketLogDays/{date} (the full ticketLog array —
+ * only today's entries are pulled out of it and merge-synced; see
+ * syncTicketLogDay above for why only "today" is touched here).
  * @param {string} uid - The user's Firebase UID
  * @param {object} dailyTotals - The daily totals data
- * @param {object} ticketLog - The ticket log array
- * @param {object} settings - Agent name, theme, counting toggle
+ * @param {object} ticketLog - The full local ticketLog array
+ * @param {object} settings - Agent name, theme, counting toggle, etc.
  * @param {string} idToken - Firebase ID token for auth
  */
 async function firestoreWrite(uid, dailyTotals, ticketLog, settings, idToken) {
   const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/data/tracker`;
-  // Window the per-ticket detail arrays to whatever recent history fits
-  // under Firestore's 1MB document cap — see fitTicketDataForCloud above.
+  // Window masterLogHistory to whatever recent history fits under
+  // Firestore's 1MB document cap — see fitSettingsForCloud above.
   // dailyTotals (all-time totals) is passed through untouched either way.
-  const fitted = fitTicketDataForCloud(dailyTotals, ticketLog, settings);
-  const body = toFirestoreDoc(dailyTotals, fitted.ticketLog, fitted.settings);
+  const fittedSettings = fitSettingsForCloud(dailyTotals, settings);
+  const body = toFirestoreDoc(dailyTotals, fittedSettings);
 
   const headers = { 'Content-Type': 'application/json' };
   if (idToken) {
@@ -418,12 +568,26 @@ async function firestoreWrite(uid, dailyTotals, ticketLog, settings, idToken) {
     throw new Error(`Firestore write failed (${response.status}): ${errorText}`);
   }
 
+  // Sync today's ticketLog entries into their own subcollection document —
+  // see the "Full ticketLog history via a per-day subcollection" comment
+  // above for why this isn't just embedded in the document above.
+  const todayKey = localDateKeyForCloud(new Date());
+  const todaysEntries = (ticketLog || []).filter(e => e.date === todayKey);
+  if (todaysEntries.length) {
+    await syncTicketLogDay(uid, idToken, todayKey, todaysEntries);
+  }
+
   return true;
 }
 
 /**
  * Read a document from Firestore using Firebase ID token auth.
- * Path: /users/{uid}/data/tracker
+ * Path: /users/{uid}/data/tracker, plus the full ticketLogDays
+ * subcollection (unioned into the returned object's `ticketLog`, along
+ * with any old ticketLogJson still sitting on the main doc from before
+ * this subcollection existed — a one-time, automatic migration path that
+ * needs no manual step: the very next successful sync moves that legacy
+ * data into the subcollection and it stops being written to the main doc).
  * @param {string} uid - The user's Firebase UID
  * @param {string} idToken - Firebase ID token for auth
  * @returns {object|null} Parsed data or null if not found
@@ -452,7 +616,20 @@ async function firestoreRead(uid, idToken) {
   }
 
   const doc = await response.json();
-  return fromFirestoreDoc(doc);
+  const parsed = fromFirestoreDoc(doc);
+
+  // Union in the last CLOUD_TICKETLOG_WINDOW_DAYS days of the ticketLogDays
+  // subcollection — bounded on purpose, see the comment above
+  // firestoreReadRecentTicketLogDays. mergeTicketLogs() is a dedup-safe
+  // union, so this is also what carries any legacy ticketLogJson still
+  // sitting on the main doc (from before this subcollection existed, and
+  // itself already capped to a similar recent window by fitSettingsForCloud
+  // historically) into the subcollection on the next successful write — no
+  // manual migration step needed.
+  const subcollectionTicketLog = await firestoreReadRecentTicketLogDays(uid, idToken);
+  parsed.ticketLog = mergeTicketLogs(parsed.ticketLog, subcollectionTicketLog);
+
+  return parsed;
 }
 
 /**

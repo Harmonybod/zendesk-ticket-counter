@@ -30,11 +30,16 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Per-user ticket data — /users/{uid}/data/tracker
-    // Only the signed-in owner of `uid` may read or write their own document.
-    // request.auth.uid comes from the verified Firebase ID token sent as the
-    // Authorization: Bearer header on every firestoreRead/firestoreWrite call.
-    match /users/{uid}/data/{document=**} {
+    // Per-user data — /users/{uid}/** (the main tracker document at
+    // /users/{uid}/data/tracker, AND the per-day ticket history
+    // subcollection at /users/{uid}/ticketLogDays/{date} — Firestore caps
+    // any single document at 1MB, so full ticketLog history lives across
+    // many small day-documents there instead of growing one big field
+    // forever). Only the signed-in owner of `uid` may read or write
+    // anything under their own uid. request.auth.uid comes from the
+    // verified Firebase ID token sent as the Authorization: Bearer header
+    // on every Firestore REST call this extension makes.
+    match /users/{uid}/{document=**} {
       allow read, write: if request.auth != null && request.auth.uid == uid;
     }
 

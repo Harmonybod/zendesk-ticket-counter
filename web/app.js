@@ -10,7 +10,7 @@ import {
     getAuth, GoogleAuthProvider, signInWithPopup, signOut, onAuthStateChanged
 } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-auth.js';
 import {
-    getFirestore, doc, getDoc, collection, getDocs
+    getFirestore, doc, getDoc, collection, getDocs, query, where, documentId
 } from 'https://www.gstatic.com/firebasejs/10.13.2/firebase-firestore.js';
 
 // ── Firebase Config ────────────────────────────
@@ -243,9 +243,17 @@ async function loadUserData(uid) {
             return;
         }
         const d = snap.data();
+        // ticketLogJson is a legacy field kept only for old accounts synced
+        // before ticketLog moved into its own subcollection (Firestore caps
+        // a single document at 1MB, which an ever-growing ticketLog embedded
+        // here eventually hit) — it'll be empty/absent for any account whose
+        // extension has synced since. Full history now lives at
+        // users/{uid}/ticketLogDays/{date}, one small document per day.
+        const legacyTicketLog = safeParse(d.ticketLogJson, []);
+        const subcollectionTicketLog = await loadTicketLogDays(uid);
         userData = {
             dailyTotals: safeParse(d.dailyTotalsJson, {}),
-            ticketLog: safeParse(d.ticketLogJson, []),
+            ticketLog: dedupeTicketLog([...legacyTicketLog, ...subcollectionTicketLog]),
             masterLogHistory: safeParse(d.masterLogHistoryJson, []),
             ticketPayeeIssues: safeParse(d.ticketPayeeIssuesJson, {}),
             shiftConfig: safeParse(d.shiftConfigJson, null),
@@ -256,6 +264,46 @@ async function loadUserData(uid) {
         console.error('[TT Dashboard] Failed to load user data:', e.message);
         userData = { dailyTotals: {}, ticketLog: [], masterLogHistory: [], ticketPayeeIssues: {}, shiftConfig: null, weeklyShiftConfig: null, agentName: '' };
     }
+}
+
+// Reads the last TICKETLOG_WINDOW_DAYS days out of the ticketLogDays
+// subcollection (document IDs are "YYYY-MM-DD" keys, which sort correctly
+// as plain strings, so a documentId() range query works) and returns their
+// concatenation. Deliberately bounded rather than reading the whole
+// subcollection — that would itself grow by one document per day forever,
+// and every document read counts against Firestore's daily quota. This
+// window comfortably covers everything the dashboard actually displays
+// (Today/Week/Month, leaderboards, Recent Tickets) at a fixed, small cost
+// no matter how long this account has existed.
+const TICKETLOG_WINDOW_DAYS = 90;
+
+async function loadTicketLogDays(uid) {
+    try {
+        const cutoff = dateKey(Date.now() - TICKETLOG_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+        const q = query(collection(db, 'users', uid, 'ticketLogDays'), where(documentId(), '>=', cutoff));
+        const snap = await getDocs(q);
+        const all = [];
+        snap.forEach(docSnap => {
+            const entries = safeParse(docSnap.data().entriesJson, []);
+            all.push(...entries);
+        });
+        return all;
+    } catch (e) {
+        console.warn('[TT Dashboard] Failed to load ticketLogDays:', e.message);
+        return [];
+    }
+}
+
+// Same composite-key dedup as the extension's mergeTicketLogs — guards
+// against double-counting if the same entry ever appears in both the
+// legacy field and the subcollection (e.g. mid-migration).
+function dedupeTicketLog(entries) {
+    const map = new Map();
+    entries.forEach(e => {
+        if (!e) return;
+        map.set(`${e.ticketNumber}:${e.date}:${e.type}:${e.timestamp}`, e);
+    });
+    return Array.from(map.values());
 }
 
 function safeParse(json, fallback) {

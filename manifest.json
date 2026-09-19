@@ -3,6 +3,7 @@
   "name": "Zendesk Ticket Tracker",
   "version": "5.2",
   "description": "Premium Zendesk ticket analytics — leaderboard, ratio breakdowns, hourly pacing, calendar inspector, real Excel export, cloud sync, level ranks, and an animated floating overlay.",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApsDlvB9PNvGeJQzqVLBFv2r2adz66qaCbVOzbmOp9dwCASahKFc/iv1DL2WVOXEbbsFx7t2WOShVeISTQEskAFcLC/eIC5pbp//QInJuB8rovRPMLaPOAvI7fdjqXVPWqw3g4ivLLMzRt2JzYk08VAi7xq2raYclnLrcDfrYmspj5r+zJetMC7t4djEtA2wUtsfAbdPhbuPnhiaZUbCD1tnb6Et0Gf1BTiYsF2+azn++/feMHT0OJtIum1Hg6BKytpqBi2Yncl2p33tmkyWLHcLg8FP+BtE111+3zYMrtyg3TSh6D2Tl7Hylv+AQuhPM3bek7yCv6GYeFvcD+IfqfwIDAQAB",
   "icons": {
     "16": "icons/ticket_tracker_circle_badge_logo_darker.png",
     "48": "icons/ticket_tracker_circle_badge_logo_darker.png",

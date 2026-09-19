@@ -197,7 +197,18 @@ function getMonthlyTotal(dailyTotals) {
   return total;
 }
 
-async function syncToCloud(dailyTotals, ticketLog, settings) {
+// remoteTicketLogForReconciliation is optional: pass it (a flat ticketLog
+// already fetched from Firestore) when `ticketLog` may contain changes to
+// days OTHER than today — the first-time upload of local history, or the
+// merged result after pulling another device's data. firestoreWrite() on
+// its own only ever pushes TODAY's bucket (the cheap, common case for a
+// routine per-ticket sync); this reconciles every OTHER day that actually
+// differs, via pushChangedTicketLogDays. reconciliationWindowDays bounds
+// that reconciliation to the last N days by default (matching whatever
+// window remoteTicketLogForReconciliation was itself read with) — pass
+// Infinity only for a true first-ever backfill, where remote is `[]` for
+// everything and a one-time full write is exactly what's wanted.
+async function syncToCloud(dailyTotals, ticketLog, settings, remoteTicketLogForReconciliation, reconciliationWindowDays) {
   if (!isFirebaseConfigured()) {
     console.log('[ZTK Cloud] Firebase not configured, skipping cloud sync');
     return false;
@@ -214,6 +225,9 @@ async function syncToCloud(dailyTotals, ticketLog, settings) {
   try {
     console.log('[ZTK Cloud] Pushing data to Firestore…');
     await firestoreWrite(session.uid, dailyTotals, ticketLog, settings, session.idToken);
+    if (remoteTicketLogForReconciliation !== undefined) {
+      await pushChangedTicketLogDays(session.uid, session.idToken, ticketLog, remoteTicketLogForReconciliation, reconciliationWindowDays);
+    }
   } catch (e) {
     console.error('[ZTK Cloud] ✗ Failed to push to Firestore:', e.message);
     coreSyncOk = false;
@@ -307,7 +321,7 @@ async function pullFromCloud() {
         countingEnabled: localData.countingEnabled,
         shiftConfig: localData.shiftConfig,
         weeklyShiftConfig: localData.weeklyShiftConfig
-      });
+      }, [], Infinity); // remote is empty (this is the "no doc yet" branch) — backfill ALL local history, unbounded, one time only
       return pushOk ? localData.dailyTotals : null;
     }
 
@@ -371,7 +385,7 @@ async function pullFromCloud() {
         countingEnabled: localData.countingEnabled,
         shiftConfig: updates.shiftConfig || localData.shiftConfig,
         weeklyShiftConfig: updates.weeklyShiftConfig || localData.weeklyShiftConfig
-      });
+      }, remoteData.ticketLog || []); // reconcile every day the merge actually changed, not just today
       if (!pushOk) {
         console.error('[ZTK Cloud] ✗ Failed to push merged result back to Firestore');
         return null;
