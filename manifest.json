@@ -19,10 +19,8 @@
   },
   "permissions": [
     "storage",
-    "activeTab",
     "identity",
-    "identity.email",
-    "downloads"
+    "identity.email"
   ],
   "host_permissions": [
     "*://*.zendesk.com/*",

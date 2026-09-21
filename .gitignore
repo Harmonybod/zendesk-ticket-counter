@@ -10,3 +10,9 @@ import-data.js
 
 # IDE
 .vscode/
+
+# Local packaging / marketing artifacts (not part of the source)
+/brag-output/
+/store-assets/
+/store-package/
+*.zip
