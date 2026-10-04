@@ -16,3 +16,4 @@ import-data.js
 /store-assets/
 /store-package/
 *.zip
+/zendesk-ticket-tracker-extension/
