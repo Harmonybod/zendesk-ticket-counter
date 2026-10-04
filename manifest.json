@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Zendesk Ticket Tracker",
-  "version": "5.3",
+  "version": "5.4",
   "description": "Premium Zendesk ticket analytics: leaderboard, hourly pacing, calendar inspector, Excel export, cloud sync, and level ranks.",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEApsDlvB9PNvGeJQzqVLBFv2r2adz66qaCbVOzbmOp9dwCASahKFc/iv1DL2WVOXEbbsFx7t2WOShVeISTQEskAFcLC/eIC5pbp//QInJuB8rovRPMLaPOAvI7fdjqXVPWqw3g4ivLLMzRt2JzYk08VAi7xq2raYclnLrcDfrYmspj5r+zJetMC7t4djEtA2wUtsfAbdPhbuPnhiaZUbCD1tnb6Et0Gf1BTiYsF2+azn++/feMHT0OJtIum1Hg6BKytpqBi2Yncl2p33tmkyWLHcLg8FP+BtE111+3zYMrtyg3TSh6D2Tl7Hylv+AQuhPM3bek7yCv6GYeFvcD+IfqfwIDAQAB",
   "icons": {
@@ -10,7 +10,7 @@
     "128": "icons/icon-128.png"
   },
   "oauth2": {
-    "client_id": "360976988892-0kg8lk2p03j7mgl8v7ld4i45544r0ovt.apps.googleusercontent.com",
+    "client_id": "360976988892-5vuq71m7k6a3oeir63rbclvnk1c3ku40.apps.googleusercontent.com",
     "scopes": [
       "openid",
       "email",

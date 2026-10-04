@@ -2483,23 +2483,65 @@ function renderTeamLeaderboard(period) {
                 const card = document.createElement('div');
                 card.className = `lb-card lb-rank-${i + 1}${isChampion ? ' lb-crowned' : ''}`;
 
-                // Avatar: try photo URL, fallback to initial
-                const avatarHtml = user.photoUrl
-                    ? `<img class="lb-avatar" src="${user.photoUrl}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
-                       <div class="lb-avatar-placeholder" style="display:none">${(user.displayName || user.email || '?')[0].toUpperCase()}</div>`
-                    : `<div class="lb-avatar-placeholder">${(user.displayName || user.email || '?')[0].toUpperCase()}</div>`;
-
                 const displayName = user.displayName || (user.email ? user.email.split('@')[0] : 'Unknown');
                 const emailShort = user.email || '';
+                const initial = (user.displayName || user.email || '?')[0].toUpperCase();
 
-                card.innerHTML = `
-                    <div class="lb-rank-badge">${meta.badge}</div>
-                    ${avatarHtml}
-                    <div class="lb-name">${displayName}</div>
-                    <div class="lb-email-small">${emailShort}</div>
-                    <div class="lb-score">${score} <span>${scoreUnit}</span></div>
-                    ${isChampion ? `<div class="lb-winner-tag">🏆 ${championLabel}</div>` : ''}
-                `;
+                // Built with DOM APIs rather than an innerHTML string, for two
+                // reasons. An inline onerror="" attribute is executable code
+                // that the Web Store reads as remotely hosted (it got this item
+                // rejected once), and displayName/email come from the shared
+                // leaderboard — i.e. from other users — so they must never be
+                // parsed as HTML.
+                const badge = document.createElement('div');
+                badge.className = 'lb-rank-badge';
+                badge.textContent = meta.badge;
+                card.appendChild(badge);
+
+                const placeholder = document.createElement('div');
+                placeholder.className = 'lb-avatar-placeholder';
+                placeholder.textContent = initial;
+
+                if (user.photoUrl) {
+                    const img = document.createElement('img');
+                    img.className = 'lb-avatar';
+                    img.alt = '';
+                    img.referrerPolicy = 'no-referrer';
+                    placeholder.style.display = 'none';
+                    img.addEventListener('error', () => {
+                        img.style.display = 'none';
+                        placeholder.style.display = 'flex';
+                    });
+                    img.src = user.photoUrl;
+                    card.appendChild(img);
+                }
+                card.appendChild(placeholder);
+
+                const nameEl = document.createElement('div');
+                nameEl.className = 'lb-name';
+                nameEl.textContent = displayName;
+                card.appendChild(nameEl);
+
+                const emailEl = document.createElement('div');
+                emailEl.className = 'lb-email-small';
+                emailEl.textContent = emailShort;
+                card.appendChild(emailEl);
+
+                const scoreEl = document.createElement('div');
+                scoreEl.className = 'lb-score';
+                scoreEl.append(`${score} `);
+                const unitEl = document.createElement('span');
+                unitEl.textContent = scoreUnit;
+                scoreEl.appendChild(unitEl);
+                card.appendChild(scoreEl);
+
+                if (isChampion) {
+                    const tag = document.createElement('div');
+                    tag.className = 'lb-winner-tag';
+                    tag.textContent = `🏆 ${championLabel}`;
+                    card.appendChild(tag);
+                }
+
                 podium.appendChild(card);
             });
 
@@ -2508,17 +2550,27 @@ function renderTeamLeaderboard(period) {
                 moreBtn.style.display = 'block';
                 moreBtn.textContent = `Show ${rest.length} more ▾`;
 
-                fullList.innerHTML = rest.map((u, i) => {
+                // Same reasoning as the podium above: these names and
+                // emails come from other users via the shared leaderboard, so
+                // they are set as text, never parsed as HTML.
+                fullList.innerHTML = '';
+                rest.forEach((u, i) => {
                     const name = u.displayName || (u.email ? u.email.split('@')[0] : 'Unknown');
-                    return `
-                        <div class="lb-row">
-                            <span class="lb-row-rank">#${i + 4}</span>
-                            <span class="lb-row-name">${name}</span>
-                            <span class="lb-row-email">${u.email || ''}</span>
-                            <span class="lb-row-score">${fmtScore(u[totalField])}</span>
-                        </div>
-                    `;
-                }).join('');
+                    const row = document.createElement('div');
+                    row.className = 'lb-row';
+                    [
+                        ['lb-row-rank', `#${i + 4}`],
+                        ['lb-row-name', name],
+                        ['lb-row-email', u.email || ''],
+                        ['lb-row-score', String(fmtScore(u[totalField]))]
+                    ].forEach(([cls, text]) => {
+                        const span = document.createElement('span');
+                        span.className = cls;
+                        span.textContent = text;
+                        row.appendChild(span);
+                    });
+                    fullList.appendChild(row);
+                });
 
                 let expanded = false;
                 // Remove any old onclick to avoid stacking handlers
