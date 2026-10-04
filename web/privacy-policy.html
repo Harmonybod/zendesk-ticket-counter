@@ -33,7 +33,7 @@
 <body>
   <div class="wrap">
     <h1>Privacy Policy</h1>
-    <div class="updated">Zendesk Ticket Tracker &middot; Last updated: September 21, 2026</div>
+    <div class="updated">Zendesk Ticket Tracker &middot; Last updated: October 5, 2026</div>
 
     <p>Zendesk Ticket Tracker ("the extension") is a browser extension and companion web dashboard that helps a support agent count and analyze the Zendesk tickets they personally handle. This page explains what data the extension collects, why, and how it's stored.</p>
 
@@ -54,12 +54,28 @@
     <h2>How your data is stored</h2>
     <ul>
       <li><strong>On your device:</strong> most settings and cached counts are stored locally using the browser's <code>chrome.storage.local</code>, so the popup and widget load instantly.</li>
-      <li><strong>In the cloud:</strong> once you sign in with Google, your ticket data and settings are synced to a private document in our Firebase/Firestore project, scoped to your account only. This is what lets your stats follow you across devices and appear on the companion web dashboard.</li>
+      <li><strong>In the cloud:</strong> once you sign in with Google, your ticket data and settings are synced to a private document in our Firebase/Firestore project, readable and writable only by your own account. This is what lets your stats follow you across devices and appear on the companion web dashboard.</li>
+      <li><strong>In the shared leaderboard:</strong> a separate, deliberately public-to-other-users record. See &ldquo;Leaderboards&rdquo; below.</li>
     </ul>
+
+    <h2>Leaderboards &mdash; what other users can see</h2>
+    <div class="card">
+      <p><strong>If you are signed in, some of your information is visible to every other signed-in user of this extension.</strong> The extension includes weekly and monthly leaderboards, and making a leaderboard work means publishing an entry that others can read.</p>
+      <p>Each leaderboard entry contains:</p>
+      <ul>
+        <li>your display name</li>
+        <li>your email address</li>
+        <li>your Google profile photo</li>
+        <li>your ticket total for the period, and your peak tickets-per-hour</li>
+      </ul>
+      <p>These entries are stored in a shared collection that is <strong>not currently scoped to your team or organization</strong>. Any signed-in user of the extension can read every entry, including yours &mdash; not only colleagues you know. Your detailed ticket history, settings, and integration tokens are <em>not</em> part of a leaderboard entry and remain private to your account.</p>
+      <p>Leaderboard entries are written only while you are signed in. Sign out, and no new entries are published for you. To have existing entries removed, contact us using the address at the bottom of this page.</p>
+    </div>
 
     <h2>Who your data is shared with</h2>
     <p>Your data is never sold, and it is not shared with third parties beyond what's needed to run the extension:</p>
     <ul>
+      <li><strong>Other users of this extension:</strong> your name, email address, profile photo, and period ticket totals, via the shared leaderboard described above. This applies whenever you are signed in.</li>
       <li><strong>Google / Firebase:</strong> used for sign-in and to host your synced data (Firestore, Identity Toolkit).</li>
       <li><strong>Slack / Telegram (optional, opt-in only):</strong> if you configure a bot token and chat ID yourself, a report is sent to that destination. This is entirely under your control and off by default.</li>
     </ul>
@@ -68,8 +84,8 @@
     <h2>Your control over your data</h2>
     <ul>
       <li>Use "Clear All Data" inside the extension's settings to erase your locally stored data at any time.</li>
-      <li>Sign out at any time to stop cloud sync.</li>
-      <li>Contact us (below) to request full deletion of your synced account data from our servers.</li>
+      <li>Sign out at any time to stop cloud sync and to stop publishing new leaderboard entries.</li>
+      <li>Contact us (below) to request full deletion of your synced account data, including any leaderboard entries, from our servers.</li>
     </ul>
 
     <h2>Changes to this policy</h2>
