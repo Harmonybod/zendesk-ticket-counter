@@ -101,10 +101,22 @@ const LEVEL_UP_MESSAGES = {
 // ticket" average, which rewarded having less idle time in your day almost
 // as much as it rewarded actually handling more tickets, and made the
 // number keep drifting down the longer a shift went on.
+// The ticketLog keeps every click, but a ticket re-classified on the same
+// day counts once, under its latest category (same rule as the export).
+// Mirrors background.js's latestTicketLogEntries — keep both in sync.
+function latestTicketLogEntries(ticketLog) {
+    const latest = new Map();
+    for (const entry of ticketLog || []) {
+        const k = `${entry.ticketNumber}:${entry.date}`;
+        const prev = latest.get(k);
+        if (!prev || entry.timestamp >= prev.timestamp) latest.set(k, entry);
+    }
+    return Array.from(latest.values());
+}
+
 // Mirrors background.js's computeDayPeakHourlyTickets — keep both in sync.
 function computeDayPeakHourlyTickets(ticketLog, dateStr) {
-    const timestamps = (ticketLog || [])
-        .filter(e => e.date === dateStr)
+    const timestamps = latestTicketLogEntries((ticketLog || []).filter(e => e.date === dateStr))
         .map(e => e.timestamp)
         .sort((a, b) => a - b);
     if (!timestamps.length) return 0;
@@ -127,7 +139,8 @@ function computeDayPeakHourlyTickets(ticketLog, dateStr) {
 // changing even while the popup just sits open.
 function computeRecentTPH(ticketLog, dateStr, windowMinutes) {
     const cutoff = Date.now() - windowMinutes * 60000;
-    const entries = (ticketLog || []).filter(e => e.date === dateStr && e.timestamp >= cutoff);
+    const entries = latestTicketLogEntries((ticketLog || []).filter(e => e.date === dateStr))
+        .filter(e => e.timestamp >= cutoff);
     if (!entries.length) return 0;
     const earliest = Math.min(...entries.map(e => e.timestamp));
     const elapsedHours = Math.max((Date.now() - earliest) / 3600000, 5 / 60); // floor at 5 minutes
@@ -2397,13 +2410,24 @@ if ($('backup-import-file')) {
         reader.onload = (event) => {
             try {
                 const importedData = JSON.parse(event.target.result);
-                if (typeof importedData !== 'object' || importedData === null) {
+                if (typeof importedData !== 'object' || importedData === null || Array.isArray(importedData)) {
                     showToast('⚠ Invalid JSON file');
                     return;
                 }
-                chrome.storage.local.set(importedData, () => {
-                    if (chrome.runtime.lastError) return;
-                    showToast('✓ Backup restored successfully!');
+                showToast('⏳ Importing backup…', 60000);
+                chrome.runtime.sendMessage({ action: 'IMPORT_BACKUP', data: importedData }, (response) => {
+                    if (chrome.runtime.lastError || !response || !response.success) {
+                        showToast(`⚠ ${(response && response.message) || 'Import failed'}`);
+                        return;
+                    }
+                    const summary = `${response.added} ticket${response.added === 1 ? '' : 's'} added across ${response.days} day${response.days === 1 ? '' : 's'}`;
+                    if (response.synced) {
+                        showToast(`✓ Imported ${summary}, synced to Google account`, 4000);
+                    } else if (response.reason === 'auth') {
+                        showToast(`✓ Imported ${summary}. Sign in with Google, then import again to sync it`, 6000);
+                    } else {
+                        showToast(`✓ Imported ${summary} locally. Cloud sync failed, try importing again`, 6000);
+                    }
                     loadStats(() => { renderStats(); renderChart(); });
                 });
             } catch (err) {
@@ -2411,6 +2435,7 @@ if ($('backup-import-file')) {
             }
         };
         reader.readAsText(file);
+        e.target.value = '';
     });
 }
 

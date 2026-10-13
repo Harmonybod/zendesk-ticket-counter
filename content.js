@@ -36,30 +36,43 @@
     }
 
     // ── Payee Issue Scraper ───────────────────────
+    // Returns the ticket's Payee Issue Type, '' when the field is on screen
+    // but blank (so a value captured earlier gets cleared, never left behind
+    // as e.g. "Other"), or null when the field isn't on screen at all.
     function scrapeLivePayeeIssue() {
-        let payeeIssueVal = "-";
         const labels = Array.from(document.querySelectorAll('label'));
         const targetLabel = labels.find(el => {
             const rect = el.getBoundingClientRect();
             return el.textContent.includes('Payee Issue Type') && rect.width > 0 && rect.height > 0;
         });
+        if (!targetLabel || !targetLabel.parentElement) return null;
 
-        if (targetLabel && targetLabel.parentElement) {
-            const dropdownElement = targetLabel.parentElement.querySelector('[aria-haspopup="listbox"], [aria-haspopup="true"], select, button, .role-select');
-            if (dropdownElement) {
-                const rawText = dropdownElement.innerText || dropdownElement.textContent || dropdownElement.value || "";
-                let cleanText = rawText.trim().split('\n')[0].trim();
+        const dropdownElement = targetLabel.parentElement.querySelector('[aria-haspopup="listbox"], [aria-haspopup="true"], select, button, .role-select');
+        if (!dropdownElement) return null;
 
-                if (cleanText && cleanText !== "-" && !cleanText.toLowerCase().includes('select')) {
-                    if (cleanText.includes('::')) {
-                        const parts = cleanText.split('::');
-                        cleanText = parts[parts.length - 1].trim();
-                    }
-                    payeeIssueVal = cleanText;
-                }
-            }
+        const rawText = dropdownElement.innerText || dropdownElement.textContent || dropdownElement.value || "";
+        let cleanText = rawText.trim().split('\n')[0].trim();
+        if (!cleanText || cleanText === "-" || cleanText.toLowerCase().includes('select')) return '';
+
+        if (cleanText.includes('::')) {
+            const parts = cleanText.split('::');
+            cleanText = parts[parts.length - 1].trim();
         }
-        return payeeIssueVal;
+        return cleanText;
+    }
+
+    // Right after switching tickets, Zendesk can still be showing the
+    // previous ticket's fields for a moment — don't attribute those to the
+    // new ticket number. Only read the field once the ticket has settled.
+    const PAYEE_SETTLE_MS = 1500;
+    let payeeTicketId = null;
+    let payeeTicketSince = 0;
+    function scrapeSettledPayeeIssue(ticketId) {
+        if (ticketId !== payeeTicketId) {
+            payeeTicketId = ticketId;
+            payeeTicketSince = Date.now();
+        }
+        return Date.now() - payeeTicketSince >= PAYEE_SETTLE_MS ? scrapeLivePayeeIssue() : null;
     }
 
     function generateShortCode(text) {
@@ -232,20 +245,22 @@
             if (ticketId) {
                 displayContainer.innerHTML = `<span class="zd-ticket-badge">#${ticketId}</span>`;
 
-                const liveIssue = scrapeLivePayeeIssue();
+                const liveIssue = scrapeSettledPayeeIssue(ticketId);
                 if (issuePreviewBox) {
-                    if (liveIssue !== "-") {
+                    if (liveIssue) {
                         const shortCode = generateShortCode(liveIssue);
                         issuePreviewBox.innerHTML = `<span class="zd-issue-preview-badge" title="${liveIssue}">${shortCode}</span>`;
-
-                        // Routed through background.js's serialized write queue —
-                        // this fires every second across every open Zendesk tab,
-                        // so a direct get/set here would race with itself and with
-                        // the click handler below, silently dropping captured data.
-                        chrome.runtime.sendMessage({ action: 'RECORD_PAYEE_ISSUE', ticketId, issueVal: liveIssue });
                     } else {
                         issuePreviewBox.innerHTML = "";
                     }
+                }
+                if (liveIssue !== null) {
+                    // Routed through background.js's serialized write queue —
+                    // this fires every second across every open Zendesk tab,
+                    // so a direct get/set here would race with itself and with
+                    // the click handler below, silently dropping captured data.
+                    // A blank field ('') clears any value stored for this ticket.
+                    chrome.runtime.sendMessage({ action: 'RECORD_PAYEE_ISSUE', ticketId, issueVal: liveIssue });
                 }
             } else {
                 displayContainer.innerHTML = `<span class="zd-ticket-none">None</span>`;
@@ -574,7 +589,7 @@
                                 // a direct storage get/set here — this used to race against the
                                 // periodic refresh's own get/set on the same keys (and against other
                                 // open tabs), silently dropping captured Payee Issue Type data.
-                                const payeeIssueVal = scrapeLivePayeeIssue();
+                                const payeeIssueVal = scrapeSettledPayeeIssue(ticketId);
                                 chrome.runtime.sendMessage(
                                     { action: 'RECORD_TICKET_HANDLED', ticketId, category: type, issueVal: payeeIssueVal },
                                     () => {

@@ -128,8 +128,7 @@ function getWeeklyTotal(dailyTotals) {
 // number keep drifting down the longer a shift went on.
 // Mirrors popup.js's computeDayPeakHourlyTickets — keep both in sync.
 function computeDayPeakHourlyTickets(ticketLog, dateStr) {
-  const timestamps = (ticketLog || [])
-    .filter(e => e.date === dateStr)
+  const timestamps = latestTicketLogEntries((ticketLog || []).filter(e => e.date === dateStr))
     .map(e => e.timestamp)
     .sort((a, b) => a - b);
   if (!timestamps.length) return 0;
@@ -415,6 +414,19 @@ async function pullFromCloudIfNeeded() {
 
 // ── Merge Helpers ─────────────────────────────
 
+// The ticketLog keeps every click (it's what syncs between devices), but a
+// ticket counts once per day: only its latest entry for that date.
+// Mirrors popup.js's and web/app.js's latestTicketLogEntries — keep in sync.
+function latestTicketLogEntries(ticketLog) {
+  const latest = new Map();
+  for (const entry of ticketLog || []) {
+    const k = `${entry.ticketNumber}:${entry.date}`;
+    const prev = latest.get(k);
+    if (!prev || entry.timestamp >= prev.timestamp) latest.set(k, entry);
+  }
+  return Array.from(latest.values());
+}
+
 function mergeDailyTotals(local, remote) {
   const merged = { ...local };
   const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
@@ -438,9 +450,13 @@ function mergeDailyTotals(local, remote) {
 // makes "worked 3 tickets on phone A + 2 on phone B, same day" correctly
 // total 5 instead of max(3, 2) = 3. Dates with no ticketLog entries at all
 // (older data captured before ticketLog existed) keep their max-merged value.
+//
+// A ticket re-classified on the same day (e.g. Open, then later Closed)
+// counts once, under its most recent category — the same rule the XLSX/CSV
+// export already uses — so it moves columns instead of counting twice.
 function reconcileDailyTotalsWithLog(dailyTotals, ticketLog) {
   const recomputed = {};
-  for (const entry of ticketLog) {
+  for (const entry of latestTicketLogEntries(ticketLog)) {
     if (!recomputed[entry.date]) recomputed[entry.date] = emptyTotals();
     recomputed[entry.date][entry.type] = (recomputed[entry.date][entry.type] ?? 0) + 1;
   }
@@ -537,15 +553,15 @@ function queueStorageWrite(fn) {
 // Finds the most recent ticketLog entry for this ticket on this date, so
 // addEvent can tell a same-category re-click (block it, nothing to do)
 // apart from a re-classification into a different category (allowed — the
-// ticket just moves columns in the CSV/XLSX export, see exportData's and
-// exportSingleDaySpreadsheet's per-ticket dedup, which keeps it from
-// appearing under both categories there).
+// ticket just moves to its new category, in the counts and in the CSV/XLSX
+// export alike; see latestTicketLogEntries).
 function findLastEntryForTicketOnDate(ticketLog, ticketNumber, dateKeyStr) {
-  for (let i = ticketLog.length - 1; i >= 0; i--) {
-    const entry = ticketLog[i];
-    if (entry.ticketNumber === ticketNumber && entry.date === dateKeyStr) return entry;
+  let last = null;
+  for (const entry of ticketLog) {
+    if (entry.ticketNumber === ticketNumber && entry.date === dateKeyStr
+        && (!last || entry.timestamp >= last.timestamp)) last = entry;
   }
-  return null;
+  return last;
 }
 
 // ── Add Event ─────────────────────────────────
@@ -566,15 +582,14 @@ async function addEvent(type, ticketNumber) {
     // Append event
     data.events.push({ type, timestamp: ts, ticketNumber: ticketNumber || null });
 
-    // Increment daily total
-    if (!data.dailyTotals[key]) {
-      data.dailyTotals[key] = { open: 0, new: 0, team: 0, compliance: 0, escalation: 0, closed: 0 };
-    }
-    data.dailyTotals[key][type] = (data.dailyTotals[key][type] ?? 0) + 1;
-
-    // Append to ticket log if we have a ticket number
     if (ticketNumber) {
+      // Recount from the log rather than just +1, so a re-classified ticket
+      // moves out of its old category instead of counting twice.
       data.ticketLog.push({ date: key, type, ticketNumber, timestamp: ts });
+      data.dailyTotals = reconcileDailyTotalsWithLog(data.dailyTotals, data.ticketLog);
+    } else {
+      if (!data.dailyTotals[key]) data.dailyTotals[key] = emptyTotals();
+      data.dailyTotals[key][type] = (data.dailyTotals[key][type] ?? 0) + 1;
     }
 
     await saveAll({ events: data.events, dailyTotals: data.dailyTotals, ticketLog: data.ticketLog });
@@ -592,22 +607,21 @@ async function undoLastEvent() {
     const last = data.events.pop();
     const key = dateKey(last.timestamp);
 
-    if (data.dailyTotals[key] && data.dailyTotals[key][last.type] > 0) {
-      data.dailyTotals[key][last.type] -= 1;
-    }
-
     // Also remove the matching ticketLog entry — previously this was left
     // behind, so an "undone" ticket still showed up in CSV/XLSX exports,
     // and a cloud sync could resurrect the undone count in dailyTotals since
     // that's now recomputed from ticketLog on merge (see reconcileDailyTotalsWithLog).
-    if (last.ticketNumber) {
-      for (let i = data.ticketLog.length - 1; i >= 0; i--) {
-        const entry = data.ticketLog[i];
-        if (entry.ticketNumber === last.ticketNumber && entry.type === last.type && entry.timestamp === last.timestamp) {
-          data.ticketLog.splice(i, 1);
-          break;
-        }
-      }
+    // Recounting from the log also puts an undone re-classification back
+    // under the ticket's previous category.
+    const logIdx = last.ticketNumber
+      ? data.ticketLog.findLastIndex(e => e.ticketNumber === last.ticketNumber && e.type === last.type && e.timestamp === last.timestamp)
+      : -1;
+    if (logIdx !== -1) {
+      data.ticketLog.splice(logIdx, 1);
+      data.dailyTotals = reconcileDailyTotalsWithLog(data.dailyTotals, data.ticketLog);
+      if (!data.ticketLog.some(e => e.date === key)) data.dailyTotals[key] = emptyTotals();
+    } else if (data.dailyTotals[key] && data.dailyTotals[key][last.type] > 0) {
+      data.dailyTotals[key][last.type] -= 1;
     }
 
     await saveAll({ events: data.events, dailyTotals: data.dailyTotals, ticketLog: data.ticketLog });
@@ -617,13 +631,24 @@ async function undoLastEvent() {
 
 // ── Record Payee Issue (live-scraped, periodic) ───────────────────────────
 
+// issueVal '' means the field is on screen but blank in Zendesk: it clears a
+// value captured earlier (e.g. one carried over from the previous ticket)
+// so the export leaves the cell blank. It's stored as '' rather than
+// deleted so it also wins over the stale value still in the cloud
+// (mergeTicketPayeeIssues prefers local).
+function applyPayeeIssue(mapping, ticketId, issueVal) {
+  if (issueVal == null || issueVal === '-') return false;
+  if (issueVal === '' ? !mapping[ticketId] : mapping[ticketId] === issueVal) return false;
+  mapping[ticketId] = issueVal;
+  return true;
+}
+
 async function recordPayeeIssue(ticketId, issueVal) {
-  if (!ticketId || !issueVal || issueVal === '-') return { success: true };
+  if (!ticketId || issueVal == null || issueVal === '-') return { success: true };
   return queueStorageWrite(async () => {
     const data = await getAll();
     const mapping = data.ticketPayeeIssues || {};
-    if (mapping[ticketId] !== issueVal) {
-      mapping[ticketId] = issueVal;
+    if (applyPayeeIssue(mapping, ticketId, issueVal)) {
       // saveAll (not saveLocal) so this pushes to the cloud right away —
       // otherwise it only synced whenever some other action next happened
       // to also save dailyTotals.
@@ -647,13 +672,148 @@ async function recordTicketHandled(ticketId, category, issueVal) {
       timestamp: new Date().toISOString()
     });
 
-    if (issueVal && issueVal !== '-') {
-      ticketPayeeIssues[ticketId] = issueVal;
-    }
+    applyPayeeIssue(ticketPayeeIssues, ticketId, issueVal);
 
     await saveAll({ masterLogHistory, ticketPayeeIssues });
     return { success: true };
   });
+}
+
+// ── Import Backup ─────────────────────────────
+// Accepts both this extension's own JSON backup (a chrome.storage.local
+// dump with dailyTotals/ticketLog) and the older tracker's export, which
+// only has masterLogHistory with its own category names. Everything is
+// merged into existing data, never overwritten, so importing the same file
+// twice is harmless.
+const IMPORT_CATEGORY_TO_TYPE = {
+  open: 'open', openPending: 'open',
+  new: 'new', updates: 'new',
+  team: 'team',
+  compliance: 'compliance',
+  escalation: 'escalation', escalations: 'escalation',
+  closed: 'closed'
+};
+const IMPORT_DATA_KEYS = ['events', 'dailyTotals', 'ticketLog', 'masterLogHistory', 'ticketPayeeIssues', 'agentName'];
+
+function ticketLogEntryKey(e) {
+  return `${e.ticketNumber}:${e.date}:${e.type}:${e.timestamp}`;
+}
+
+function normalizeImportedTicketLog(imported) {
+  const fromTicketLog = (imported.ticketLog || []).map(e => {
+    const type = IMPORT_CATEGORY_TO_TYPE[e && e.type];
+    const ts = Number(e && e.timestamp);
+    if (!type || !e.ticketNumber || !Number.isFinite(ts)) return null;
+    return { date: e.date || dateKey(ts), type, ticketNumber: String(e.ticketNumber), timestamp: ts };
+  }).filter(Boolean);
+  if (fromTicketLog.length) return fromTicketLog;
+
+  // Older tracker format: derive the per-ticket log from masterLogHistory.
+  return (imported.masterLogHistory || []).map(e => {
+    const type = IMPORT_CATEGORY_TO_TYPE[e && e.category];
+    const ts = Date.parse(e && e.timestamp);
+    if (!type || !e.ticketId || !Number.isFinite(ts)) return null;
+    return { date: dateKey(ts), type, ticketNumber: String(e.ticketId), timestamp: ts };
+  }).filter(Boolean);
+}
+
+// Same rule as addEvent's duplicate guard: an imported click is dropped if
+// the previous entry for that ticket on that day already has the same type.
+// Existing local entries are always kept.
+function mergeImportedTicketLog(localLog, importedLog) {
+  const localKeys = new Set(localLog.map(ticketLogEntryKey));
+  const lastTypeByTicketDay = new Map();
+  const kept = [];
+  for (const e of mergeTicketLogs(localLog, importedLog)) {
+    const k = `${e.ticketNumber}:${e.date}`;
+    if (!localKeys.has(ticketLogEntryKey(e)) && lastTypeByTicketDay.get(k) === e.type) continue;
+    lastTypeByTicketDay.set(k, e.type);
+    kept.push(e);
+  }
+  return kept;
+}
+
+async function importBackup(imported) {
+  if (!imported || typeof imported !== 'object') return { success: false, message: 'Invalid backup file.' };
+
+  const importedLog = normalizeImportedTicketLog(imported);
+  const importedMasterLog = (imported.masterLogHistory || [])
+    .filter(e => e && e.ticketId && IMPORT_CATEGORY_TO_TYPE[e.category])
+    .map(e => ({ ...e, ticketId: String(e.ticketId), category: IMPORT_CATEGORY_TO_TYPE[e.category] }));
+  const isNativeBackup = imported.dailyTotals !== undefined || imported.ticketLog !== undefined;
+  if (!importedLog.length && !importedMasterLog.length && !isNativeBackup) {
+    return { success: false, message: 'No ticket data found in this file.' };
+  }
+  const importedDates = [...new Set(importedLog.map(e => e.date))];
+
+  // Pull whatever the cloud already holds for those exact days into the
+  // merge first, so the push below can never overwrite another device's entries.
+  const session = await getFirebaseSession(false);
+  let remoteForDates = [];
+  let cloudReadOk = false;
+  if (session && importedDates.length) {
+    try {
+      remoteForDates = await firestoreReadTicketLogDays(session.uid, session.idToken, importedDates);
+      cloudReadOk = true;
+    } catch (e) {
+      console.warn('[ZTK Import] Could not read existing cloud days, importing locally only:', e.message);
+    }
+  }
+
+  const result = await queueStorageWrite(async () => {
+    const local = await getAll();
+    const beforeCount = local.ticketLog.length;
+    const mergedLog = mergeImportedTicketLog(mergeTicketLogs(local.ticketLog, remoteForDates), importedLog);
+    const baseTotals = mergeDailyTotals(local.dailyTotals, isNativeBackup ? (imported.dailyTotals || {}) : {});
+
+    const updates = {
+      ticketLog: mergedLog,
+      dailyTotals: reconcileDailyTotalsWithLog(baseTotals, mergedLog),
+      masterLogHistory: mergeMasterLogHistory(local.masterLogHistory, importedMasterLog),
+      ticketPayeeIssues: mergeTicketPayeeIssues(local.ticketPayeeIssues, imported.ticketPayeeIssues)
+    };
+    if (!local.agentName && typeof imported.agentName === 'string' && imported.agentName.trim()) {
+      updates.agentName = imported.agentName.trim();
+    }
+    if (!local.shiftConfig && !isNativeBackup && (imported.shift || imported.startTime || imported.endTime)) {
+      updates.shiftConfig = {
+        shiftType: imported.shift || 'Day',
+        shiftStart: imported.startTime || '',
+        shiftEnd: imported.endTime || '',
+        shiftRemarks: imported.remarks || ''
+      };
+    }
+    // This extension's own backups also carry settings (theme, tokens,
+    // button preferences) — restore those as before.
+    if (isNativeBackup) {
+      for (const [k, v] of Object.entries(imported)) {
+        if (!IMPORT_DATA_KEYS.includes(k)) updates[k] = v;
+      }
+    }
+
+    await saveLocal(updates);
+    return { added: mergedLog.length - beforeCount, days: importedDates.length };
+  });
+
+  if (!session) return { success: true, ...result, synced: false, reason: 'auth' };
+  if (importedDates.length && !cloudReadOk) return { success: true, ...result, synced: false };
+
+  try {
+    // Days older than the normal 90-day sync window only reach the cloud here.
+    const local = await getLocal();
+    const dateSet = new Set(importedDates);
+    const localForDates = local.ticketLog.filter(e => dateSet.has(e.date));
+    await pushChangedTicketLogDays(session.uid, session.idToken, localForDates, remoteForDates, Infinity);
+  } catch (e) {
+    console.error('[ZTK Import] ✗ Failed to push imported days to Firestore:', e.message);
+    return { success: true, ...result, synced: false };
+  }
+
+  // Standard pull+merge+push: brings dailyTotals and settings in the main
+  // cloud document up to date with everything just imported.
+  lastCloudSyncTime = 0;
+  const pulled = await pullFromCloud();
+  return { success: true, ...result, synced: pulled !== null };
 }
 
 // ── Aggregation ───────────────────────────────
@@ -861,10 +1021,13 @@ async function getDetailedStats(range, dateParam) {
     const targetDate = dateParam || todayKey();
     const { startHour, endHour } = getShiftHourRange(targetDate, data.shiftConfig, data.weeklyShiftConfig);
 
+    // Counted from the ticketLog (latest category per ticket, same as the
+    // totals); only days from before ticketLog existed fall back to events.
+    const dayEntries = latestTicketLogEntries(ticketLog.filter(e => e.date === targetDate));
+    const hourSource = dayEntries.length ? dayEntries : events.filter(ev => dateKey(ev.timestamp) === targetDate);
     const hourCounts = {};
-    for (const ev of events) {
-      const evDate = dateKey(ev.timestamp);
-      if (evDate === targetDate && ALL_TYPES.includes(ev.type)) {
+    for (const ev of hourSource) {
+      if (ALL_TYPES.includes(ev.type)) {
         const hour = new Date(ev.timestamp).getHours();
         if (!hourCounts[hour]) {
           hourCounts[hour] = {};
@@ -1513,6 +1676,9 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
         case 'RECORD_TICKET_HANDLED':
           sendResponse(await recordTicketHandled(msg.ticketId, msg.category, msg.issueVal));
           break;
+        case 'IMPORT_BACKUP':
+          sendResponse(await importBackup(msg.data));
+          break;
         case 'GET_STATS':
           sendResponse(await getStats());
           break;
@@ -1653,6 +1819,12 @@ chrome.runtime.onStartup.addListener(async () => {
 chrome.runtime.onInstalled.addListener(async (details) => {
   if (details.reason === 'install' || details.reason === 'update') {
     console.log(`[ZTK Cloud] Extension ${details.reason} — checking auth and syncing…`);
+    // Re-count stored days under the one-count-per-ticket-per-day rule, so
+    // past double counts are fixed even while signed out.
+    await queueStorageWrite(async () => {
+      const data = await getLocal();
+      await saveLocal({ dailyTotals: reconcileDailyTotalsWithLog(data.dailyTotals, data.ticketLog) });
+    });
     const session = await getFirebaseSession(false);
     if (session) {
       await pullFromCloud();

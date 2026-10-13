@@ -277,9 +277,10 @@ async function loadUserData(uid) {
         // users/{uid}/ticketLogDays/{date}, one small document per day.
         const legacyTicketLog = safeParse(d.ticketLogJson, []);
         const subcollectionTicketLog = await loadTicketLogDays(uid);
+        const ticketLog = dedupeTicketLog([...legacyTicketLog, ...subcollectionTicketLog]);
         userData = {
-            dailyTotals: safeParse(d.dailyTotalsJson, {}),
-            ticketLog: dedupeTicketLog([...legacyTicketLog, ...subcollectionTicketLog]),
+            dailyTotals: recountDailyTotalsFromLog(safeParse(d.dailyTotalsJson, {}), ticketLog),
+            ticketLog,
             masterLogHistory: safeParse(d.masterLogHistoryJson, []),
             ticketPayeeIssues: safeParse(d.ticketPayeeIssuesJson, {}),
             shiftConfig: safeParse(d.shiftConfigJson, null),
@@ -330,6 +331,36 @@ function dedupeTicketLog(entries) {
         map.set(`${e.ticketNumber}:${e.date}:${e.type}:${e.timestamp}`, e);
     });
     return Array.from(map.values());
+}
+
+// The ticketLog keeps every click, but a ticket re-classified on the same
+// day counts once, under its latest category (same rule as the export).
+// Mirrors the extension's latestTicketLogEntries — keep both in sync.
+function latestTicketLogEntries(ticketLog) {
+    const latest = new Map();
+    for (const entry of ticketLog || []) {
+        const k = `${entry.ticketNumber}:${entry.date}`;
+        const prev = latest.get(k);
+        if (!prev || entry.timestamp >= prev.timestamp) latest.set(k, entry);
+    }
+    return Array.from(latest.values());
+}
+
+// Recounts every day the loaded ticketLog covers, so totals stored in the
+// cloud by an older extension version (which counted a re-classified
+// ticket twice) still show correctly. Days outside the loaded window keep
+// their stored totals. Mirrors background.js's reconcileDailyTotalsWithLog.
+function recountDailyTotalsFromLog(dailyTotals, ticketLog) {
+    const result = { ...dailyTotals };
+    const recounted = new Set();
+    latestTicketLogEntries(ticketLog).forEach(e => {
+        if (!recounted.has(e.date)) {
+            recounted.add(e.date);
+            result[e.date] = emptyTotals();
+        }
+        result[e.date][e.type] = (result[e.date][e.type] || 0) + 1;
+    });
+    return result;
 }
 
 function safeParse(json, fallback) {
@@ -822,8 +853,8 @@ function getDetailedStatsLocal(range, dateParam) {
         const { startHour, endHour } = getShiftHourRange(targetDate, userData.shiftConfig, userData.weeklyShiftConfig);
 
         const hourCounts = {};
-        ticketLog.forEach(e => {
-            if (e.date === targetDate && ALL_TYPES.includes(e.type)) {
+        latestTicketLogEntries(ticketLog.filter(e => e.date === targetDate)).forEach(e => {
+            if (ALL_TYPES.includes(e.type)) {
                 const hour = new Date(e.timestamp).getHours();
                 if (!hourCounts[hour]) {
                     hourCounts[hour] = {};

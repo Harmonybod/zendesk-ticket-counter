@@ -345,31 +345,39 @@ async function syncTicketLogDay(uid, idToken, date, localEntriesForDay) {
 // much total history exists. Returns their union as one flat ticketLog
 // array, the same shape every existing caller already expects.
 async function firestoreReadRecentTicketLogDays(uid, idToken, days = CLOUD_TICKETLOG_WINDOW_DAYS) {
-  const documents = recentDateKeys(days).map(
-    d => `${FIRESTORE_RESOURCE_BASE}/users/${encodeURIComponent(uid)}/ticketLogDays/${encodeURIComponent(d)}`
-  );
+  return firestoreReadTicketLogDays(uid, idToken, recentDateKeys(days));
+}
+
+// Reads exactly the given "YYYY-MM-DD" day documents (chunked :batchGet
+// calls) and returns their union as one flat ticketLog array.
+async function firestoreReadTicketLogDays(uid, idToken, dateKeys) {
   const headers = { 'Content-Type': 'application/json', ...(idToken ? { Authorization: `Bearer ${idToken}` } : {}) };
-
-  const response = await fetch(`${FIRESTORE_BASE}:batchGet`, {
-    method: 'POST',
-    headers,
-    body: JSON.stringify({ documents })
-  });
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`ticketLogDays batchGet failed (${response.status}): ${errorText}`);
-  }
-
-  const results = await response.json(); // array of { found?: {...} } | { missing?: "..." }
   const all = [];
-  (results || []).forEach(r => {
-    if (!r || !r.found) return;
-    try {
-      all.push(...JSON.parse(r.found.fields?.entriesJson?.stringValue || '[]'));
-    } catch (e) {
-      console.warn('[ZTK Firebase] Failed to parse a ticketLogDays document:', e.message);
+  const CHUNK = 100;
+  for (let i = 0; i < dateKeys.length; i += CHUNK) {
+    const documents = dateKeys.slice(i, i + CHUNK).map(
+      d => `${FIRESTORE_RESOURCE_BASE}/users/${encodeURIComponent(uid)}/ticketLogDays/${encodeURIComponent(d)}`
+    );
+    const response = await fetch(`${FIRESTORE_BASE}:batchGet`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({ documents })
+    });
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`ticketLogDays batchGet failed (${response.status}): ${errorText}`);
     }
-  });
+
+    const results = await response.json(); // array of { found?: {...} } | { missing?: "..." }
+    (results || []).forEach(r => {
+      if (!r || !r.found) return;
+      try {
+        all.push(...JSON.parse(r.found.fields?.entriesJson?.stringValue || '[]'));
+      } catch (e) {
+        console.warn('[ZTK Firebase] Failed to parse a ticketLogDays document:', e.message);
+      }
+    });
+  }
   return all;
 }
 
