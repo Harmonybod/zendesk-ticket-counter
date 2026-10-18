@@ -646,8 +646,10 @@ function applyPayeeIssue(mapping, ticketId, issueVal) {
 async function recordPayeeIssue(ticketId, issueVal) {
   if (!ticketId || issueVal == null || issueVal === '-') return { success: true };
   return queueStorageWrite(async () => {
-    const data = await getAll();
-    const mapping = data.ticketPayeeIssues || {};
+    // Only this one key — getAll() would also load the whole event and
+    // ticket history just to compare one value.
+    const { ticketPayeeIssues } = await chrome.storage.local.get(['ticketPayeeIssues']);
+    const mapping = ticketPayeeIssues || {};
     if (applyPayeeIssue(mapping, ticketId, issueVal)) {
       // saveAll (not saveLocal) so this pushes to the cloud right away —
       // otherwise it only synced whenever some other action next happened

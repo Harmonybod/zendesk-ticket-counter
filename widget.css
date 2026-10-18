@@ -770,7 +770,8 @@
   border-radius: 12px;
   box-sizing: border-box;
   border: 1px solid var(--ov-border);
-  backdrop-filter: blur(10px);
+  /* No backdrop-filter: the panel is 97-98% opaque, so the blur was
+     invisible, yet it re-blurred the Zendesk page behind it every frame. */
 
   display: flex;
   flex-direction: column;
@@ -841,12 +842,9 @@
   text-overflow: clip;
   width: 100%;
   box-sizing: border-box;
-  animation: badgeGlow 2s infinite ease-in-out;
-}
-
-@keyframes badgeGlow {
-  0%, 100% { box-shadow: 0 0 4px var(--ov-badge-1); }
-  50% { box-shadow: 0 0 10px var(--ov-badge-1); }
+  /* A fixed glow — an animated box-shadow is repainted on the page's main
+     thread every frame, competing with Zendesk itself. */
+  box-shadow: 0 0 7px var(--ov-badge-1);
 }
 
 .zd-ticket-none {
@@ -1108,7 +1106,6 @@
   border-radius: 50%;
   background: radial-gradient(circle, rgba(160, 160, 160, 0.75) 0%, rgba(160, 160, 160, 0) 70%);
   filter: blur(1.5px);
-  animation: zd-fx-smoke-drift 2.6s ease-in-out infinite;
   opacity: 0;
 }
 
@@ -1133,7 +1130,6 @@
   background: radial-gradient(ellipse at bottom, #fff8d6 0%, #ffc93c 25%, #ff5b1a 50%, #e8291c 75%, rgba(232, 41, 28, 0) 88%);
   opacity: 0;
   transform-origin: bottom center;
-  animation: zd-fx-fire-flicker 0.45s ease-in-out infinite alternate;
 }
 
 @keyframes zd-fx-fire-flicker {
@@ -1147,7 +1143,6 @@
 .fx-buzzer {
   background: radial-gradient(circle, var(--fx-buzzer-color, #ffd700) 0%, rgba(255, 215, 0, 0) 72%);
   opacity: 0;
-  animation: zd-fx-buzzer-pulse 1.1s ease-in-out infinite;
 }
 
 @keyframes zd-fx-buzzer-pulse {
@@ -1282,17 +1277,23 @@
   transition: opacity 0.3s ease 0.12s;
 }
 
+/* Each looping effect only animates while its button is in that stage —
+   left running on every button all the time, they kept the page redrawing
+   ~60 times a second even with nothing visible. (The smoke's keyframes set
+   its opacity, which is also why stray puffs used to show at every stage.) */
 .zd-btn[data-fx-stage="smoke"] .fx-smoke::before,
 .zd-btn[data-fx-stage="smoke"] .fx-smoke::after {
-  opacity: calc(0.35 + var(--fx-progress, 0) * 0.55);
+  animation: zd-fx-smoke-drift 2.6s ease-in-out infinite;
 }
 
 .zd-btn[data-fx-stage="fire"] .fx-fire {
   opacity: calc(0.45 + var(--fx-progress, 0) * 0.4);
+  animation: zd-fx-fire-flicker 0.45s ease-in-out infinite alternate;
 }
 
 .zd-btn[data-fx-stage="buzzer"] .fx-buzzer {
   opacity: calc(0.3 + var(--fx-progress, 0) * 0.6);
+  animation: zd-fx-buzzer-pulse 1.1s ease-in-out infinite;
 }
 
 .zd-btn[data-fx-stage="crowned"] ~ .fx-crown {

@@ -42,8 +42,11 @@
     function scrapeLivePayeeIssue() {
         const labels = Array.from(document.querySelectorAll('label'));
         const targetLabel = labels.find(el => {
+            // Text check first: measuring every label on the page forced
+            // Zendesk to recalculate its whole layout once a second.
+            if (!el.textContent.includes('Payee Issue Type')) return false;
             const rect = el.getBoundingClientRect();
-            return el.textContent.includes('Payee Issue Type') && rect.width > 0 && rect.height > 0;
+            return rect.width > 0 && rect.height > 0;
         });
         if (!targetLabel || !targetLabel.parentElement) return null;
 
@@ -234,38 +237,45 @@
     }
 
     // ── Overlay Display Refresher ─────────────────
+    // Runs every second, so it only touches the page or messages the
+    // background when something actually changed — rewriting the badge
+    // every tick kept Zendesk restyling and re-laying-out its page.
+    let lastSentPayee = null;
+
     function refreshOverlayDisplay() {
         if (!chrome.runtime || !chrome.runtime.id || !chrome.storage || !chrome.storage.local) return;
 
         const ticketId = getTicketIdFromPage();
         const displayContainer = document.getElementById('zd-current-ticket');
         const issuePreviewBox = document.getElementById('zd-issue-preview-container');
+        if (!displayContainer) return;
 
-        if (displayContainer) {
-            if (ticketId) {
-                displayContainer.innerHTML = `<span class="zd-ticket-badge">#${ticketId}</span>`;
+        // Shown values live on the elements themselves, so a rebuilt
+        // overlay (settings change) starts fresh and gets filled in again.
+        const shownTicket = ticketId || '';
+        if (displayContainer.dataset.shown !== shownTicket) {
+            displayContainer.dataset.shown = shownTicket;
+            displayContainer.innerHTML = ticketId
+                ? `<span class="zd-ticket-badge">#${ticketId}</span>`
+                : `<span class="zd-ticket-none">None</span>`;
+        }
 
-                const liveIssue = scrapeSettledPayeeIssue(ticketId);
-                if (issuePreviewBox) {
-                    if (liveIssue) {
-                        const shortCode = generateShortCode(liveIssue);
-                        issuePreviewBox.innerHTML = `<span class="zd-issue-preview-badge" title="${liveIssue}">${shortCode}</span>`;
-                    } else {
-                        issuePreviewBox.innerHTML = "";
-                    }
-                }
-                if (liveIssue !== null) {
-                    // Routed through background.js's serialized write queue —
-                    // this fires every second across every open Zendesk tab,
-                    // so a direct get/set here would race with itself and with
-                    // the click handler below, silently dropping captured data.
-                    // A blank field ('') clears any value stored for this ticket.
-                    chrome.runtime.sendMessage({ action: 'RECORD_PAYEE_ISSUE', ticketId, issueVal: liveIssue });
-                }
-            } else {
-                displayContainer.innerHTML = `<span class="zd-ticket-none">None</span>`;
-                if (issuePreviewBox) issuePreviewBox.innerHTML = "";
-            }
+        const liveIssue = ticketId ? scrapeSettledPayeeIssue(ticketId) : null;
+        if (issuePreviewBox && issuePreviewBox.dataset.shown !== (liveIssue || '')) {
+            issuePreviewBox.dataset.shown = liveIssue || '';
+            issuePreviewBox.innerHTML = liveIssue
+                ? `<span class="zd-issue-preview-badge" title="${liveIssue}">${generateShortCode(liveIssue)}</span>`
+                : "";
+        }
+
+        if (liveIssue !== null && lastSentPayee !== `${ticketId}:${liveIssue}`) {
+            lastSentPayee = `${ticketId}:${liveIssue}`;
+            // Routed through background.js's serialized write queue — every
+            // open Zendesk tab runs this loop, so a direct get/set here would
+            // race with itself and with the click handler below, silently
+            // dropping captured data. A blank field ('') clears any value
+            // stored for this ticket.
+            chrome.runtime.sendMessage({ action: 'RECORD_PAYEE_ISSUE', ticketId, issueVal: liveIssue });
         }
     }
 
@@ -408,18 +418,24 @@
         const profile = BUTTON_FX_PROFILES[type];
         if (!profile) return;
         const { stage, progress } = getButtonFxStage(profile, count || 0);
-        btn.dataset.fxStage = stage;
-        btn.style.setProperty('--fx-progress', progress.toFixed(3));
+        if (btn.dataset.fxStage !== stage) btn.dataset.fxStage = stage;
+        const progressStr = progress.toFixed(3);
+        if (btn.style.getPropertyValue('--fx-progress') !== progressStr) btn.style.setProperty('--fx-progress', progressStr);
     }
 
     // Updates each button's level FX stage *and* its count badge/daily-total
     // (the "Widget Counting" setting) off the same single dailyTotals read.
+    // Called when the overlay is built, when dailyTotals changes, and when
+    // the day rolls over — not polled every second.
+    let fxRefreshedDay = null;
     function refreshButtonFxAll() {
         const overlay = document.getElementById(OVERLAY_ID);
         if (!overlay || !chrome.storage || !chrome.storage.local) return;
+        const today = localDateKey(new Date());
+        fxRefreshedDay = today;
         chrome.storage.local.get(['dailyTotals'], (res) => {
             if (chrome.runtime.lastError) return;
-            const todayTotals = (res.dailyTotals && res.dailyTotals[localDateKey(new Date())]) || {};
+            const todayTotals = (res.dailyTotals && res.dailyTotals[today]) || {};
             let dayTotal = 0;
             overlay.querySelectorAll('.zd-btn[data-type]').forEach(btn => {
                 const type = btn.getAttribute('data-type');
@@ -430,7 +446,7 @@
                 updateButtonCountBadge(btn, count);
             });
             const totalEl = overlay.querySelector('#zd-daily-total-num');
-            if (totalEl) totalEl.textContent = dayTotal;
+            if (totalEl && totalEl.textContent !== String(dayTotal)) totalEl.textContent = dayTotal;
 
             checkLevelUpOnPage(getLevelForTotal(dayTotal));
         });
@@ -439,7 +455,7 @@
     function updateButtonCountBadge(btn, count) {
         const slot = btn.closest('.zd-btn-slot');
         const badge = slot && slot.querySelector('.zd-count-badge');
-        if (badge) badge.textContent = count;
+        if (badge && badge.textContent !== String(count)) badge.textContent = count;
     }
 
     // ── Create Overlay DOM ────────────────────────
@@ -526,6 +542,8 @@
 
                 document.body.appendChild(overlay);
                 makeElementDraggable(overlay);
+                refreshOverlayDisplay();
+                refreshButtonFxAll();
 
                 // ── Category Action Buttons ──
                 overlay.querySelectorAll('.zd-btn[data-type]').forEach(button => {
@@ -614,6 +632,8 @@
             if (watched.some(k => k in changes)) {
                 const existing = document.getElementById(OVERLAY_ID);
                 if (existing) existing.remove();
+            } else if ('dailyTotals' in changes) {
+                refreshButtonFxAll();
             }
         });
     }
@@ -627,7 +647,9 @@
         }
         createOverlay();
         refreshOverlayDisplay();
-        refreshButtonFxAll();
+        // Counts refresh on dailyTotals changes (see onChanged above); the
+        // tick only catches the day rolling over at midnight.
+        if (fxRefreshedDay !== localDateKey(new Date())) refreshButtonFxAll();
     }
 
     setInterval(runTick, 1000);
