@@ -212,11 +212,26 @@
 
       <div id="report-body" hidden>
         <section class="report-hero">
-          <div class="report-hero-label">Total tickets handled by the team</div>
-          <div class="report-hero-value" id="report-total">0</div>
-          <div class="report-hero-sub" id="report-hero-sub"></div>
+          <div class="report-hero-main">
+            <div class="report-hero-label">Total tickets handled by the team</div>
+            <div class="report-hero-value" id="report-total">0</div>
+            <div class="report-hero-sub" id="report-hero-sub"></div>
+          </div>
+          <div class="report-hero-side">
+            <div class="report-hero-stat">
+              <div class="report-hero-label">New tickets</div>
+              <div class="report-hero-stat-value" id="report-new-total">0</div>
+              <div class="report-hero-sub" id="report-new-sub"></div>
+            </div>
+            <div class="report-hero-stat">
+              <div class="report-hero-label">Most handled ticket</div>
+              <div class="report-hero-stat-value" id="report-top-ticket">—</div>
+              <div class="report-hero-sub" id="report-top-ticket-sub"></div>
+            </div>
+          </div>
         </section>
 
+        <div class="report-grid">
         <section class="report-card">
           <h3 class="report-card-title">Payee Issue Types</h3>
           <div class="report-pie-wrap"><canvas id="report-pie"></canvas></div>
@@ -241,6 +256,7 @@
           <h3 class="report-card-title">Most Handled Tickets</h3>
           <div id="report-top-tickets"></div>
         </section>
+        </div>
       </div>
     </div>
   </div>

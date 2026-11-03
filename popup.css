@@ -579,8 +579,8 @@ body {
     border-color: rgba(108, 99, 255, 0.3);
 }
 
-/* Monthly report button — only on days 1-7 of a month. It bounces until
-   it has been opened once for that month. */
+/* Monthly report button — shown on days 1-7 of a month, always bouncing
+   to catch the eye. */
 .report-btn {
     background: var(--accent);
     border: none;
@@ -594,14 +594,11 @@ body {
     white-space: nowrap;
     flex-shrink: 0;
     box-shadow: 0 3px 10px rgba(0, 0, 0, 0.3);
+    animation: report-bounce 1.4s ease-in-out infinite;
 }
 
 .report-btn[hidden] {
     display: none;
-}
-
-.report-btn.bounce {
-    animation: report-bounce 1.4s ease-in-out infinite;
 }
 
 @keyframes report-bounce {

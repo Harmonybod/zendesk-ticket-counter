@@ -1305,9 +1305,9 @@ h1, h2 { font-weight: 700; }
 .view-nav {
   display: flex;
   gap: 4px;
-  max-width: 820px;
+  max-width: none;
   margin: 0 auto;
-  padding: 14px 18px 0;
+  padding: 14px 28px 0;
   border-bottom: 1px solid var(--border);
 }
 
@@ -1339,10 +1339,9 @@ h1, h2 { font-weight: 700; }
 }
 
 /* ── Monthly Report ───────────────────────────────────────────────────── */
+/* Uses the full window width (the dashboard view stays centered). */
 .report-view {
-  max-width: 820px;
-  margin: 0 auto;
-  padding: 16px 18px 28px;
+  padding: 20px 28px 36px;
 }
 
 .report-toolbar {
@@ -1351,11 +1350,11 @@ h1, h2 { font-weight: 700; }
   justify-content: space-between;
   gap: 12px;
   flex-wrap: wrap;
-  margin-bottom: 14px;
+  margin-bottom: 16px;
 }
 
 .report-title {
-  font-size: 18px;
+  font-size: 20px;
   font-weight: 800;
 }
 
@@ -1379,13 +1378,28 @@ h1, h2 { font-weight: 700; }
   border-radius: var(--radius-md);
 }
 
+/* Hero: the team total big on the left, New tickets and the most handled
+   ticket stacked on the right; a soft accent glow behind it. */
 .report-hero {
-  text-align: center;
-  padding: 26px 16px 22px;
-  margin-bottom: 14px;
-  background: var(--btn-active-bg), var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 18px;
+  padding: 34px 36px;
+  margin-bottom: 16px;
+  background:
+    radial-gradient(ellipse 60% 120% at 0% 0%, var(--accent-dim), transparent 70%),
+    radial-gradient(ellipse 50% 100% at 100% 100%, var(--accent-dim), transparent 70%),
+    var(--bg-card);
+  border: 1px solid var(--border-h);
+  border-radius: 18px;
+}
+
+.report-hero-main {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .report-hero-label {
@@ -1393,26 +1407,60 @@ h1, h2 { font-weight: 700; }
   font-weight: 700;
   color: var(--text-2);
   text-transform: uppercase;
-  letter-spacing: 0.5px;
+  letter-spacing: 0.6px;
 }
 
 .report-hero-value {
-  font-size: 64px;
+  font-size: clamp(64px, 9vw, 120px);
   font-weight: 800;
-  line-height: 1.1;
+  line-height: 1;
+  letter-spacing: -2px;
   color: var(--accent);
-  margin: 6px 0;
+  margin: 10px 0 12px;
   font-variant-numeric: tabular-nums;
 }
 
 .report-hero-sub {
-  font-size: 12px;
+  font-size: 13px;
   color: var(--text-2);
 }
 
+.report-hero-side {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.report-hero-stat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 16px 20px;
+  background: var(--bg-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+
+.report-hero-stat-value {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--text-1);
+  margin: 4px 0 2px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* Cards below the hero: two per row on wide screens, one on narrow. */
+.report-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 520px), 1fr));
+  gap: 16px;
+}
+
 .report-card {
-  padding: 16px;
-  margin-bottom: 14px;
+  min-width: 0;
+  padding: 18px;
   background: var(--bg-card);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
@@ -1433,12 +1481,12 @@ h1, h2 { font-weight: 700; }
 
 .report-pie-wrap {
   position: relative;
-  height: 280px;
+  height: 300px;
 }
 
 .report-bar-wrap {
   position: relative;
-  height: 220px;
+  height: 260px;
 }
 
 .report-note {
@@ -1447,32 +1495,19 @@ h1, h2 { font-weight: 700; }
   margin-top: 8px;
 }
 
-.report-top-hero {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-bottom: 12px;
-}
-
-.report-top-number {
-  font-size: 28px;
-  font-weight: 800;
-  color: var(--accent);
-}
-
-.report-top-meta {
-  font-size: 13px;
-  color: var(--text-2);
-}
-
-@media (max-width: 480px) {
-  .report-hero-value { font-size: 48px; }
-  .report-pie-wrap { height: 340px; }
-  .view-btn { padding: 9px 10px; }
-}
-
 /* The top-10 table is short — show it whole rather than scrolling */
 .report-card .tickets-scroll {
   max-height: none;
+}
+
+@media (max-width: 760px) {
+  .report-hero { grid-template-columns: 1fr; padding: 24px 20px; }
+}
+
+@media (max-width: 480px) {
+  .report-view { padding: 16px 16px 28px; }
+  .view-nav { padding: 12px 16px 0; }
+  .report-hero-value { font-size: 56px; }
+  .report-pie-wrap { height: 340px; }
+  .view-btn { padding: 9px 10px; }
 }

@@ -246,6 +246,22 @@ async function syncToCloud(dailyTotals, ticketLog, settings, remoteTicketLogForR
 
 const refreshedLastPeriods = new Set();
 
+// Leaderboard entries from extensions older than 5.8 have no best day, so
+// the Level ranking would leave those agents out. Work it out from their
+// synced dailyTotals instead (cached per worker lifetime).
+const peerDailyTotalsCache = new Map();
+
+async function fillMissingPeakDays(entries, field, dateKeys, idToken) {
+  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
+  await Promise.all(entries.filter(e => e[field] == null).map(async (e) => {
+    if (!peerDailyTotalsCache.has(e.uid)) {
+      peerDailyTotalsCache.set(e.uid, await readUserDailyTotals(e.uid, idToken).catch(() => ({})));
+    }
+    const totals = peerDailyTotalsCache.get(e.uid);
+    e[field] = Math.max(0, ...dateKeys.map(k => ALL_TYPES.reduce((sum, t) => sum + ((totals[k] || {})[t] ?? 0), 0)));
+  }));
+}
+
 // ── Cloud Sync: Pull from Firestore ───────────
 
 async function pullFromCloud() {
@@ -1720,6 +1736,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
               break;
             }
             const entries = await readWeeklyLeaderboard(session.idToken, weekKey);
+            if (!msg.weekKey) await fillMissingPeakDays(entries, 'weekPeakDay', getWeekDateKeys(1), session.idToken);
             sendResponse({ entries, weekKey });
           }
           break;
@@ -1734,6 +1751,7 @@ chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
               break;
             }
             const entries = await readMonthlyLeaderboard(session.idToken, monthKey);
+            if (!msg.monthKey) await fillMissingPeakDays(entries, 'monthPeakDay', getMonthDateKeys(1), session.idToken);
             sendResponse({ entries, monthKey });
           }
           break;

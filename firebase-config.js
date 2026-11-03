@@ -889,3 +889,25 @@ async function readMonthlyLeaderboard(idToken, monthKey) {
   });
 }
 
+
+/**
+ * Read another agent's synced dailyTotals (only that one field, via a field
+ * mask — the tracker document also holds their full history). Allowed for
+ * extension users by the teammate read rule in firestore.rules. Used to
+ * work out the leaderboard level for agents whose extension is older than
+ * 5.8 and so doesn't publish its best day yet.
+ * @returns {object} dailyTotals, or {} if unavailable
+ */
+async function readUserDailyTotals(uid, idToken) {
+  const url = `${FIRESTORE_BASE}/users/${encodeURIComponent(uid)}/data/tracker?mask.fieldPaths=dailyTotalsJson`;
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+  const response = await fetch(url, { method: 'GET', headers });
+  if (!response.ok) return {};
+  const data = await response.json();
+  try {
+    return JSON.parse(data.fields?.dailyTotalsJson?.stringValue || '{}');
+  } catch (e) {
+    return {};
+  }
+}

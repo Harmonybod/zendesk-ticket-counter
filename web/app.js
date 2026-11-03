@@ -261,7 +261,9 @@ document.addEventListener('visibilitychange', () => {
 });
 
 if ($('refresh-btn')) $('refresh-btn').addEventListener('click', () => {
-    teamReportCache.clear(); // re-read the team report too, not just your own data
+    // re-read teammates' data too, not just your own
+    teamReportCache.clear();
+    agentDailyTotalsCache.clear();
     refreshData();
 });
 
@@ -391,14 +393,47 @@ async function loadLeaderboard(period) {
     const snap = await getDocs(collection(db, collectionName, periodKey, 'users'));
     const rows = [];
     snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
-    // Level ranks by each agent's best single day (levels are earned per
-    // day); entries from extension versions before 5.8 have no best day yet.
+    // Level ranks by each agent's best single day (levels are earned per day).
     const totalField = isLevel ? (isWeek ? 'weekPeakDay' : 'monthPeakDay')
         : isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
-    const filtered = isLevel ? rows.filter(r => r[totalField] != null)
-        : isSpeed ? rows.filter(r => (r[totalField] || 0) > 0) : rows;
+    if (isLevel) await fillMissingPeakDays(rows, totalField, getLastPeriodDateKeys(isWeek));
+    const filtered = isSpeed ? rows.filter(r => (r[totalField] || 0) > 0) : rows;
     filtered.sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
     renderLeaderboard(filtered, totalField, isWeek, isSpeed ? 'speed' : isLevel ? 'level' : 'tickets');
+}
+
+// Date keys of last week (Monday-based) or last month.
+function getLastPeriodDateKeys(isWeek) {
+    const now = new Date();
+    if (isWeek) {
+        const day = now.getDay();
+        const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (day === 0 ? 6 : day - 1) - 7);
+        return Array.from({ length: 7 }, (_, i) => dateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i).getTime()));
+    }
+    const first = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const days = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+    return Array.from({ length: days }, (_, i) => dateKey(new Date(first.getFullYear(), first.getMonth(), i + 1).getTime()));
+}
+
+// uid -> that agent's synced dailyTotals, read once per visit (the 🔄
+// button clears it). Only needed for agents on extension versions before
+// 5.8, whose leaderboard entries don't carry their best day yet.
+const agentDailyTotalsCache = new Map();
+
+async function fillMissingPeakDays(rows, field, dateKeys) {
+    const missing = rows.filter(r => r[field] == null);
+    await Promise.all(missing.map(async (r) => {
+        if (!agentDailyTotalsCache.has(r.uid)) {
+            try {
+                const snap = await getDoc(doc(db, 'users', r.uid, 'data', 'tracker'));
+                agentDailyTotalsCache.set(r.uid, snap.exists() ? safeParse(snap.data().dailyTotalsJson, {}) : {});
+            } catch (e) {
+                agentDailyTotalsCache.set(r.uid, {});
+            }
+        }
+        const totals = agentDailyTotalsCache.get(r.uid);
+        r[field] = Math.max(0, ...dateKeys.map(k => ALL_TYPES.reduce((s, t) => s + ((totals[k] || {})[t] || 0), 0)));
+    }));
 }
 
 // Mirrors the extension's LEVELS (popup.js / content.js) — a level is
@@ -645,9 +680,7 @@ const LB_RANK_BADGES = ['👑', '🥈', '🥉'];
 function renderLeaderboard(rows, totalField, isWeek, category) {
     const list = $('leaderboard-list');
     if (!rows.length) {
-        list.innerHTML = category === 'level'
-            ? `<div class="leaderboard-empty">No level data yet for ${isWeek ? 'last week' : 'last month'}. Agents show up here after syncing with extension version 5.8 or later.</div>`
-            : `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
+        list.innerHTML = `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
         return;
     }
     const fmtScore = (v) => {
@@ -1494,6 +1527,16 @@ function renderReport(team) {
         `${team.agents} agent${team.agents === 1 ? '' : 's'} · ${team.days.size} active day${team.days.size === 1 ? '' : 's'} · ` +
         `${(team.total / activeDays).toFixed(1)} tickets per active day`;
 
+    const newTotal = team.newHourly.reduce((s, v) => s + v, 0);
+    $('report-new-total').textContent = newTotal.toLocaleString();
+    $('report-new-sub').textContent = team.total ? `${Math.round(newTotal / team.total * 100)}% of all tickets handled` : '';
+
+    const top = topTickets(team)[0];
+    $('report-top-ticket').textContent = top ? `#${top[0]}` : '—';
+    $('report-top-ticket-sub').textContent = top
+        ? `Handled ${top[1].n} time${top[1].n === 1 ? '' : 's'} by ${top[1].agents} agent${top[1].agents === 1 ? '' : 's'}`
+        : '';
+
     renderReportPie(team);
 
     const busiest = peakHour(team.hourly);
@@ -1596,16 +1639,16 @@ function renderReportHourBars(canvasId, hourly, activeDays, peak) {
     }));
 }
 
-function renderReportTopTickets(team) {
-    const top = [...team.tickets.entries()]
+// [ticketNumber, { n, agents, issue }], most handled first
+function topTickets(team) {
+    return [...team.tickets.entries()]
         .sort((a, b) => b[1].n - a[1].n || b[1].agents - a[1].agents)
         .slice(0, REPORT_TOP_TICKETS);
-    const [firstNum, first] = top[0];
+}
+
+function renderReportTopTickets(team) {
+    const top = topTickets(team);
     $('report-top-tickets').innerHTML = `
-        <div class="report-top-hero">
-            <div class="report-top-number">#${escapeHtml(firstNum)}</div>
-            <div class="report-top-meta">Handled ${first.n} time${first.n === 1 ? '' : 's'} by ${first.agents} agent${first.agents === 1 ? '' : 's'}${first.issue ? ` · ${escapeHtml(first.issue)}` : ''}</div>
-        </div>
         <div class="tickets-scroll">
             <table class="tickets-table">
                 <thead><tr><th>#</th><th>Ticket</th><th>Times handled</th><th>Agents</th><th>Payee Issue</th></tr></thead>

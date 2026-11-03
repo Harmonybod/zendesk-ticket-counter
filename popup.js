@@ -541,10 +541,9 @@ if ($('home-btn')) {
 
 // ── Monthly Report Button ──────────────────────
 // For the first week of every month, a bouncing button opens last month's
-// team report on the web dashboard. It stops bouncing once opened for that
-// month; after day 7 it's gone (the report itself stays on the dashboard).
-const MONTHLY_REPORT_PROMO_DAYS = 7; // mirrors background.js
-const REPORT_OPENED_KEY = 'monthlyReportOpened';
+// team report on the web dashboard; after day 7 it's gone (the report
+// itself stays on the dashboard).
+const MONTHLY_REPORT_PROMO_DAYS = 7;
 
 function setupMonthlyReportButton() {
     const btn = $('monthly-report-btn');
@@ -555,13 +554,7 @@ function setupMonthlyReportButton() {
     const monthKey = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
     btn.textContent = `📊 ${lastMonth.toLocaleString('en-US', { month: 'short' })} Report`;
     btn.hidden = false;
-
-    chrome.storage.local.get([REPORT_OPENED_KEY], (res) => {
-        if (res[REPORT_OPENED_KEY] !== monthKey) btn.classList.add('bounce');
-    });
     btn.addEventListener('click', () => {
-        btn.classList.remove('bounce');
-        chrome.storage.local.set({ [REPORT_OPENED_KEY]: monthKey });
         chrome.tabs.create({ url: `${DASHBOARD_URL}/?report=${monthKey}` });
     });
 }
@@ -2514,15 +2507,13 @@ function renderTeamLeaderboard(period) {
             }
 
             const entries = (response.entries || [])
-                // Speed: skip agents with no speed record. Level: skip entries
-                // from versions before 5.8, which don't carry a best day yet.
-                .filter(e => isLevel ? e[totalField] != null : (!isSpeed || (e[totalField] || 0) > 0))
+                // Speed: skip agents with no speed record. Level shows everyone
+                // (background.js fills in the best day for older versions).
+                .filter(e => !isSpeed || (e[totalField] || 0) > 0)
                 .sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
 
             if (entries.length === 0) {
-                podium.innerHTML = isLevel
-                    ? `<div class="lb-empty-msg">No level data yet for ${isWeek ? 'last week' : 'last month'}. Agents show up here after syncing with version 5.8 or later.</div>`
-                    : `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
+                podium.innerHTML = `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
                 return;
             }
 
