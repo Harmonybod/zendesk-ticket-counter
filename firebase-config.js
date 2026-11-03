@@ -889,29 +889,3 @@ async function readMonthlyLeaderboard(idToken, monthKey) {
   });
 }
 
-// ── Team Monthly Report ─────────────────────────────────────────────────────
-// One document per agent per month at /monthlyReport/{monthKey}/users/{uid},
-// holding that agent's month summary (see background.js buildMonthlyReport)
-// as a JSON string. The web dashboard reads every agent's document and adds
-// them up into the team report. Same read/write rule as the leaderboards.
-async function writeMonthlyReportEntry(uid, idToken, monthKey, displayName, reportJson) {
-  const url = `${FIRESTORE_BASE}/monthlyReport/${monthKey}/users/${encodeURIComponent(uid)}`;
-
-  const body = {
-    fields: {
-      displayName: { stringValue: displayName || '' },
-      monthKey: { stringValue: monthKey },
-      reportJson: { stringValue: reportJson },
-      lastUpdated: { integerValue: String(Date.now()) }
-    }
-  };
-
-  const headers = { 'Content-Type': 'application/json' };
-  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
-
-  const response = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) });
-  if (!response.ok) {
-    throw new Error(`Monthly report write failed (${response.status})`);
-  }
-  return true;
-}

@@ -260,7 +260,10 @@ document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && currentUid) refreshData();
 });
 
-if ($('refresh-btn')) $('refresh-btn').addEventListener('click', () => refreshData());
+if ($('refresh-btn')) $('refresh-btn').addEventListener('click', () => {
+    teamReportCache.clear(); // re-read the team report too, not just your own data
+    refreshData();
+});
 
 // ── Firestore Reads ─────────────────────────────
 async function loadUserData(uid) {
@@ -1339,12 +1342,15 @@ document.querySelectorAll('[data-view-tab]').forEach(btn => {
 });
 
 // ── Team Monthly Report ─────────────────────────
-// Every agent's extension publishes a summary of their own month to
-// monthlyReport/{YYYY-MM}/users/{uid} (see the extension's
-// buildMonthlyReport): total, tickets per clock hour, New tickets per clock
-// hour, active days, and per-ticket handled counts with payee issue. This
-// adds them up into the team view. A report is available from the 1st of
-// the following month; the in-progress month can be previewed too.
+// Built straight from every agent's synced data: the team is everyone on
+// that month's (or the next month's) monthly leaderboard, and for each of
+// them this reads that month's ticketLogDays plus their tracker document
+// (payee issues, older log). Works for every agent on any extension
+// version. Firestore rules let extension users read teammates' data (see
+// /firestore.rules). Same counting rule as everywhere else: a ticket
+// counts once per day, under its latest category. Hours are shown in this
+// browser's local time. A month's report is meant to be read from the 1st
+// of the following month; the in-progress month can be previewed too.
 const REPORT_MONTHS_BACK = 12;
 const REPORT_PIE_SLICES = 9;
 const REPORT_TOP_TICKETS = 10;
@@ -1370,22 +1376,63 @@ function monthLabel(monthKey) {
     select.addEventListener('change', () => showView('report'));
 })();
 
-function aggregateTeamReport(docs) {
+// monthKey -> team report. Past months don't change, so each is read once
+// per page visit; the 🔄 button clears this to re-read.
+const teamReportCache = new Map();
+
+function nextMonthKey(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    return monthKeyOf(new Date(y, m, 1));
+}
+
+// Everyone who synced during the month (or the month after, in case a
+// device only caught up later) — the monthly leaderboard lists them.
+async function loadTeamUids(monthKey) {
+    const uids = new Set(currentUid ? [currentUid] : []);
+    for (const key of [monthKey, nextMonthKey(monthKey)]) {
+        const snap = await getDocs(collection(db, 'monthlyLeaderboard', key, 'users'));
+        snap.forEach(d => uids.add(d.id));
+    }
+    return [...uids];
+}
+
+// One agent's handled tickets for the month: latest entry per ticket per
+// day, from the ticketLogDays subcollection plus the legacy embedded log.
+async function loadAgentMonth(uid, monthKey) {
+    const [trackerSnap, daysSnap] = await Promise.all([
+        getDoc(doc(db, 'users', uid, 'data', 'tracker')),
+        getDocs(query(collection(db, 'users', uid, 'ticketLogDays'),
+            where(documentId(), '>=', `${monthKey}-01`), where(documentId(), '<=', `${monthKey}-31`)))
+    ]);
+    const tracker = trackerSnap.exists() ? trackerSnap.data() : {};
+    const log = safeParse(tracker.ticketLogJson, []);
+    daysSnap.forEach(d => log.push(...safeParse(d.data().entriesJson, [])));
+    const entries = latestTicketLogEntries(dedupeTicketLog(log).filter(e => e.date && e.date.startsWith(`${monthKey}-`)));
+    return { entries, payeeIssues: safeParse(tracker.ticketPayeeIssuesJson, {}) };
+}
+
+async function loadTeamReport(monthKey) {
+    const uids = await loadTeamUids(monthKey);
+    const agents = await Promise.all(uids.map(uid => loadAgentMonth(uid, monthKey)));
+
     const team = { agents: 0, total: 0, hourly: new Array(24).fill(0), newHourly: new Array(24).fill(0), days: new Set(), tickets: new Map() };
-    docs.forEach(d => {
-        const r = safeParse(d.reportJson, null);
-        if (!r || !r.total) return;
+    agents.forEach(({ entries, payeeIssues }) => {
+        if (!entries.length) return;
         team.agents++;
-        team.total += r.total;
-        (r.hourly || []).forEach((v, h) => { team.hourly[h] += v || 0; });
-        (r.newHourly || []).forEach((v, h) => { team.newHourly[h] += v || 0; });
-        (r.days || []).forEach(day => team.days.add(day));
-        Object.entries(r.tickets || {}).forEach(([num, t]) => {
-            const agg = team.tickets.get(num) || { n: 0, agents: 0, issue: '' };
-            agg.n += t.n || 0;
-            agg.agents++;
-            if (t.i && !agg.issue) agg.issue = t.i;
-            team.tickets.set(num, agg);
+        team.total += entries.length;
+        const seenByAgent = new Set();
+        entries.forEach(e => {
+            const hour = new Date(e.timestamp).getHours();
+            team.hourly[hour]++;
+            if (e.type === 'new') team.newHourly[hour]++;
+            team.days.add(e.date);
+
+            const t = team.tickets.get(e.ticketNumber) || { n: 0, agents: 0, issue: '' };
+            t.n++;
+            if (!seenByAgent.has(e.ticketNumber)) { seenByAgent.add(e.ticketNumber); t.agents++; }
+            const issue = payeeIssues[e.ticketNumber];
+            if (issue && issue !== '-' && !t.issue) t.issue = issue;
+            team.tickets.set(e.ticketNumber, t);
         });
     });
     return team;
@@ -1407,24 +1454,27 @@ async function loadReport() {
     const status = $('report-status');
     $('report-title').textContent = `${monthLabel(monthKey)} Report`;
 
-    const docs = [];
-    try {
-        const snap = await getDocs(collection(db, 'monthlyReport', monthKey, 'users'));
-        snap.forEach(d => docs.push(d.data()));
-    } catch (e) {
-        status.textContent = e.code === 'permission-denied'
-            ? "The report can't be read yet: the Firestore rules for monthlyReport need to be published."
-            : "Couldn't load the report. Try the 🔄 button in a moment.";
+    let team = teamReportCache.get(monthKey);
+    if (!team) {
+        status.textContent = 'Loading the team report…';
         status.hidden = false;
         $('report-body').hidden = true;
-        return;
+        try {
+            team = await loadTeamReport(monthKey);
+            teamReportCache.set(monthKey, team);
+        } catch (e) {
+            console.warn('[TT Dashboard] Team report load failed:', e.code || e.message);
+            status.textContent = e.code === 'permission-denied'
+                ? "The team report can't be read yet: the updated Firestore rules need to be published."
+                : "Couldn't load the report. Try the 🔄 button in a moment.";
+            return;
+        }
     }
     // The month or view may have changed while this was loading.
     if (monthKey !== $('report-month-select').value || currentView !== 'report') return;
 
-    const team = aggregateTeamReport(docs);
     if (!team.total) {
-        status.textContent = `No report data for ${monthLabel(monthKey)} yet. It fills in as agents sync with extension version 5.8 or later.`;
+        status.textContent = `No tickets were logged in ${monthLabel(monthKey)}.`;
         status.hidden = false;
         $('report-body').hidden = true;
         return;

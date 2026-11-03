@@ -60,12 +60,23 @@ service cloud.firestore {
       allow write: if request.auth != null && request.auth.uid == uid;
     }
 
-    // Team monthly report — /monthlyReport/{monthKey}/users/{uid}
-    // Each agent's own month summary; the web dashboard reads all of them
-    // to build the team report. Same rule as the leaderboards above.
-    match /monthlyReport/{monthKey}/users/{uid} {
-      allow read: if request.auth != null;
-      allow write: if request.auth != null && request.auth.uid == uid;
+    // Team monthly report — the web dashboard builds it from every agent's
+    // ticket history and payee issues, so teammates may READ each other's
+    // tracker document and per-day ticket log (writing stays owner-only,
+    // via the rule at the top). "Teammate" = a signed-in user who has
+    // synced the extension themselves (has their own tracker document), so
+    // someone who merely signs into the website with any Google account
+    // can't read anything. These documents hold ticket numbers, categories,
+    // times, payee issues, shift settings and the agent's name — no tokens.
+    function isTrackerUser() {
+      return request.auth != null
+        && exists(/databases/$(database)/documents/users/$(request.auth.uid)/data/tracker);
+    }
+    match /users/{uid}/data/tracker {
+      allow read: if isTrackerUser();
+    }
+    match /users/{uid}/ticketLogDays/{day} {
+      allow read: if isTrackerUser();
     }
 
     // Deny everything else by default.

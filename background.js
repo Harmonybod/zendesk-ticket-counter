@@ -241,68 +241,10 @@ async function syncToCloud(dailyTotals, ticketLog, settings, remoteTicketLogForR
     console.warn('[ZTK Cloud] ⚠ Leaderboard write failed (your own ticket data synced fine regardless):', e.message);
   }
 
-  // Team monthly report (web dashboard) — same "nice-to-have" footing as
-  // the leaderboard, so its own try/catch.
-  try {
-    await publishMonthlyReports(session, ticketLog, settings);
-  } catch (e) {
-    console.warn('[ZTK Cloud] ⚠ Monthly report write failed (your own ticket data synced fine regardless):', e.message);
-  }
-
   return coreSyncOk;
 }
 
 const refreshedLastPeriods = new Set();
-
-// ── Team Monthly Report ───────────────────────
-// Each agent publishes a small summary of their own month to
-// /monthlyReport/{YYYY-MM}/users/{uid}; the web dashboard adds everyone's
-// up into the team report. Same counting rule as everywhere else: a ticket
-// counts once per day, under its latest category. Hours are the agent's
-// local clock hours (0-23).
-const MONTHLY_REPORT_PROMO_DAYS = 7; // mirrors popup.js's report button window
-
-function buildMonthlyReport(ticketLog, ticketPayeeIssues, monthKey) {
-  const entries = latestTicketLogEntries((ticketLog || []).filter(e => e.date && e.date.startsWith(`${monthKey}-`)));
-  const hourly = new Array(24).fill(0);
-  const newHourly = new Array(24).fill(0);
-  const days = new Set();
-  const tickets = {};
-  for (const e of entries) {
-    const hour = new Date(e.timestamp).getHours();
-    hourly[hour]++;
-    if (e.type === 'new') newHourly[hour]++;
-    days.add(e.date);
-    tickets[e.ticketNumber] = tickets[e.ticketNumber] || { n: 0 };
-    tickets[e.ticketNumber].n++;
-  }
-  for (const [ticketNumber, t] of Object.entries(tickets)) {
-    const issue = ticketPayeeIssues[ticketNumber];
-    if (issue && issue !== '-') t.i = issue;
-  }
-  return { total: entries.length, hourly, newHourly, days: [...days].sort(), tickets };
-}
-
-// monthKey -> report JSON this worker last wrote, so a sync that didn't
-// change the month's numbers doesn't rewrite the same document.
-const publishedReports = new Map();
-
-async function publishMonthlyReports(session, ticketLog, settings) {
-  const monthKeys = [getCurrentMonthKey()];
-  // Last month's report goes live on the 1st and is promoted for a week —
-  // keep it current through that week in case of late syncs.
-  if (new Date().getDate() <= MONTHLY_REPORT_PROMO_DAYS) monthKeys.push(getLastMonthKey());
-
-  for (const monthKey of monthKeys) {
-    const report = buildMonthlyReport(ticketLog, settings.ticketPayeeIssues || {}, monthKey);
-    if (!report.total) continue;
-    const json = JSON.stringify(report);
-    if (publishedReports.get(monthKey) === json) continue;
-    await writeMonthlyReportEntry(session.uid, session.idToken, monthKey,
-      settings.agentName || session.displayName || session.email, json);
-    publishedReports.set(monthKey, json);
-  }
-}
 
 // ── Cloud Sync: Pull from Firestore ───────────
 
