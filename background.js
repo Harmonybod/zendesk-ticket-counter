@@ -93,28 +93,22 @@ async function saveLocal(data) {
 
 // ── Cloud Sync: Push to Firestore ─────────────
 
-function getWeeklyTotal(dailyTotals) {
+// Date keys of the Monday-based week `weeksAgo` weeks back (0 = this week).
+function getWeekDateKeys(weeksAgo) {
   const now = new Date();
   const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  monday.setHours(0, 0, 0, 0);
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - (day === 0 ? 6 : day - 1) - 7 * weeksAgo);
+  return Array.from({ length: 7 }, (_, i) =>
+    dateKey(new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i).getTime()));
+}
 
-  let total = 0;
-  const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
-
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = dateKey(d.getTime());
-    if (dailyTotals[key]) {
-      for (const t of ALL_TYPES) {
-        total += dailyTotals[key][t] ?? 0;
-      }
-    }
-  }
-
-  return total;
+// Date keys of the calendar month `monthsAgo` months back (0 = this month).
+function getMonthDateKeys(monthsAgo) {
+  const now = new Date();
+  const first = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
+  const daysInMonth = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  return Array.from({ length: daysInMonth }, (_, i) =>
+    dateKey(new Date(first.getFullYear(), first.getMonth(), i + 1).getTime()));
 }
 
 // A day's speed record = the most tickets logged within any single
@@ -142,58 +136,21 @@ function computeDayPeakHourlyTickets(ticketLog, dateStr) {
   return maxCount;
 }
 
-function getWeeklyPeakSpeed(dailyTotals, ticketLog) {
-  const now = new Date();
-  const day = now.getDay();
-  const monday = new Date(now);
-  monday.setDate(now.getDate() - (day === 0 ? 6 : day - 1));
-  monday.setHours(0, 0, 0, 0);
-
-  let peak = 0;
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(monday);
-    d.setDate(monday.getDate() + i);
-    const key = dateKey(d.getTime());
-    if (!dailyTotals[key]) continue;
-    peak = Math.max(peak, computeDayPeakHourlyTickets(ticketLog, key));
-  }
-  return peak;
-}
-
-function getMonthlyPeakSpeed(dailyTotals, ticketLog) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  let peak = 0;
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    if (!dailyTotals[key]) continue;
-    peak = Math.max(peak, computeDayPeakHourlyTickets(ticketLog, key));
-  }
-  return peak;
-}
-
-function getMonthlyTotal(dailyTotals) {
-  const now = new Date();
-  const year = now.getFullYear();
-  const month = now.getMonth();
-  const daysInMonth = new Date(year, month + 1, 0).getDate();
-
-  let total = 0;
+// Leaderboard numbers for one week/month: total tickets, the speed record
+// (best 60-minute window) and the best single day. Levels are earned per
+// day, so the best day is what the leaderboard's Level ranking uses.
+function getPeriodStats(dailyTotals, ticketLog, keys) {
   const ALL_TYPES = ['open', 'new', 'team', 'compliance', 'escalation', 'closed'];
-
-  for (let d = 1; d <= daysInMonth; d++) {
-    const key = `${year}-${String(month + 1).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-    if (dailyTotals[key]) {
-      for (const t of ALL_TYPES) {
-        total += dailyTotals[key][t] ?? 0;
-      }
-    }
+  let total = 0, peakSpeed = 0, peakDay = 0;
+  for (const key of keys) {
+    const t = dailyTotals[key];
+    if (!t) continue;
+    const day = ALL_TYPES.reduce((sum, type) => sum + (t[type] ?? 0), 0);
+    total += day;
+    peakDay = Math.max(peakDay, day);
+    peakSpeed = Math.max(peakSpeed, computeDayPeakHourlyTickets(ticketLog, key));
   }
-
-  return total;
+  return { total, peakSpeed, peakDay };
 }
 
 // remoteTicketLogForReconciliation is optional: pass it (a flat ticketLog
@@ -248,40 +205,103 @@ async function syncToCloud(dailyTotals, ticketLog, settings, remoteTicketLogForR
   // user's own tracker document — the part that matters — already
   // succeeded above.
   try {
-    const weekKey = getCurrentWeekKey();
-    const weekTotal = getWeeklyTotal(dailyTotals);
-    const weekPeakSpeed = getWeeklyPeakSpeed(dailyTotals, ticketLog);
-    await writeWeeklyLeaderboardEntry(
-      session.uid,
-      session.idToken,
-      weekKey,
-      session.email,
-      settings.agentName || session.displayName || session.email,
-      session.photoUrl,
-      weekTotal,
-      weekPeakSpeed
-    );
+    const name = settings.agentName || session.displayName || session.email;
+    const week = getPeriodStats(dailyTotals, ticketLog, getWeekDateKeys(0));
+    await writeWeeklyLeaderboardEntry(session.uid, session.idToken, getCurrentWeekKey(), session.email, name,
+      session.photoUrl, week.total, week.peakSpeed, week.peakDay);
 
-    const monthKey = getCurrentMonthKey();
-    const monthTotal = getMonthlyTotal(dailyTotals);
-    const monthPeakSpeed = getMonthlyPeakSpeed(dailyTotals, ticketLog);
-    await writeMonthlyLeaderboardEntry(
-      session.uid,
-      session.idToken,
-      monthKey,
-      session.email,
-      settings.agentName || session.displayName || session.email,
-      session.photoUrl,
-      monthTotal,
-      monthPeakSpeed
-    );
+    const month = getPeriodStats(dailyTotals, ticketLog, getMonthDateKeys(0));
+    await writeMonthlyLeaderboardEntry(session.uid, session.idToken, getCurrentMonthKey(), session.email, name,
+      session.photoUrl, month.total, month.peakSpeed, month.peakDay);
+
+    // The leaderboard shows the last *completed* week/month. Rewrite those
+    // once per worker lifetime too, so entries made by an older version
+    // get the best-day (level) field and the current counting rule.
+    const lastWeekKey = getLastWeekKey();
+    if (!refreshedLastPeriods.has(`w:${lastWeekKey}`)) {
+      const lastWeek = getPeriodStats(dailyTotals, ticketLog, getWeekDateKeys(1));
+      if (lastWeek.total > 0) {
+        await writeWeeklyLeaderboardEntry(session.uid, session.idToken, lastWeekKey, session.email, name,
+          session.photoUrl, lastWeek.total, lastWeek.peakSpeed, lastWeek.peakDay);
+      }
+      refreshedLastPeriods.add(`w:${lastWeekKey}`);
+    }
+    const lastMonthKey = getLastMonthKey();
+    if (!refreshedLastPeriods.has(`m:${lastMonthKey}`)) {
+      const lastMonth = getPeriodStats(dailyTotals, ticketLog, getMonthDateKeys(1));
+      if (lastMonth.total > 0) {
+        await writeMonthlyLeaderboardEntry(session.uid, session.idToken, lastMonthKey, session.email, name,
+          session.photoUrl, lastMonth.total, lastMonth.peakSpeed, lastMonth.peakDay);
+      }
+      refreshedLastPeriods.add(`m:${lastMonthKey}`);
+    }
 
     if (coreSyncOk) console.log('[ZTK Cloud] ✓ Successfully synced to Firestore + weekly/monthly leaderboards');
   } catch (e) {
     console.warn('[ZTK Cloud] ⚠ Leaderboard write failed (your own ticket data synced fine regardless):', e.message);
   }
 
+  // Team monthly report (web dashboard) — same "nice-to-have" footing as
+  // the leaderboard, so its own try/catch.
+  try {
+    await publishMonthlyReports(session, ticketLog, settings);
+  } catch (e) {
+    console.warn('[ZTK Cloud] ⚠ Monthly report write failed (your own ticket data synced fine regardless):', e.message);
+  }
+
   return coreSyncOk;
+}
+
+const refreshedLastPeriods = new Set();
+
+// ── Team Monthly Report ───────────────────────
+// Each agent publishes a small summary of their own month to
+// /monthlyReport/{YYYY-MM}/users/{uid}; the web dashboard adds everyone's
+// up into the team report. Same counting rule as everywhere else: a ticket
+// counts once per day, under its latest category. Hours are the agent's
+// local clock hours (0-23).
+const MONTHLY_REPORT_PROMO_DAYS = 7; // mirrors popup.js's report button window
+
+function buildMonthlyReport(ticketLog, ticketPayeeIssues, monthKey) {
+  const entries = latestTicketLogEntries((ticketLog || []).filter(e => e.date && e.date.startsWith(`${monthKey}-`)));
+  const hourly = new Array(24).fill(0);
+  const newHourly = new Array(24).fill(0);
+  const days = new Set();
+  const tickets = {};
+  for (const e of entries) {
+    const hour = new Date(e.timestamp).getHours();
+    hourly[hour]++;
+    if (e.type === 'new') newHourly[hour]++;
+    days.add(e.date);
+    tickets[e.ticketNumber] = tickets[e.ticketNumber] || { n: 0 };
+    tickets[e.ticketNumber].n++;
+  }
+  for (const [ticketNumber, t] of Object.entries(tickets)) {
+    const issue = ticketPayeeIssues[ticketNumber];
+    if (issue && issue !== '-') t.i = issue;
+  }
+  return { total: entries.length, hourly, newHourly, days: [...days].sort(), tickets };
+}
+
+// monthKey -> report JSON this worker last wrote, so a sync that didn't
+// change the month's numbers doesn't rewrite the same document.
+const publishedReports = new Map();
+
+async function publishMonthlyReports(session, ticketLog, settings) {
+  const monthKeys = [getCurrentMonthKey()];
+  // Last month's report goes live on the 1st and is promoted for a week —
+  // keep it current through that week in case of late syncs.
+  if (new Date().getDate() <= MONTHLY_REPORT_PROMO_DAYS) monthKeys.push(getLastMonthKey());
+
+  for (const monthKey of monthKeys) {
+    const report = buildMonthlyReport(ticketLog, settings.ticketPayeeIssues || {}, monthKey);
+    if (!report.total) continue;
+    const json = JSON.stringify(report);
+    if (publishedReports.get(monthKey) === json) continue;
+    await writeMonthlyReportEntry(session.uid, session.idToken, monthKey,
+      settings.agentName || session.displayName || session.email, json);
+    publishedReports.set(monthKey, json);
+  }
 }
 
 // ── Cloud Sync: Pull from Firestore ───────────

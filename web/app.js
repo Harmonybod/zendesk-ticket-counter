@@ -214,6 +214,7 @@ onAuthStateChanged(auth, async (user) => {
     startAutoRefresh();
     $('app-main').hidden = false;
     dismissSplash(true);
+    if (initialReportMonth) showView('report');
 });
 
 // ── Refresh (manual + auto) ─────────────────────
@@ -229,6 +230,7 @@ async function refreshData() {
         await loadUserData(currentUid);
         renderAll();
         await loadLeaderboard(currentLbPeriod);
+        if (currentView === 'report') await loadReport();
     } catch (e) {
         console.warn('[TT Dashboard] Refresh failed:', e.message);
     } finally {
@@ -376,6 +378,7 @@ async function loadLeaderboard(period) {
     currentLbPeriod = period || currentLbPeriod;
     const isWeek = currentLbPeriod === 'week';
     const isSpeed = currentLbCategory === 'speed';
+    const isLevel = currentLbCategory === 'level';
     const collectionName = isWeek ? 'weeklyLeaderboard' : 'monthlyLeaderboard';
     const periodKey = isWeek ? getLastWeekKey() : getLastMonthKey();
 
@@ -385,10 +388,35 @@ async function loadLeaderboard(period) {
     const snap = await getDocs(collection(db, collectionName, periodKey, 'users'));
     const rows = [];
     snap.forEach(d => rows.push({ uid: d.id, ...d.data() }));
-    const totalField = isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
-    const filtered = isSpeed ? rows.filter(r => (r[totalField] || 0) > 0) : rows;
+    // Level ranks by each agent's best single day (levels are earned per
+    // day); entries from extension versions before 5.8 have no best day yet.
+    const totalField = isLevel ? (isWeek ? 'weekPeakDay' : 'monthPeakDay')
+        : isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
+    const filtered = isLevel ? rows.filter(r => r[totalField] != null)
+        : isSpeed ? rows.filter(r => (r[totalField] || 0) > 0) : rows;
     filtered.sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
-    renderLeaderboard(filtered, totalField, isWeek, isSpeed);
+    renderLeaderboard(filtered, totalField, isWeek, isSpeed ? 'speed' : isLevel ? 'level' : 'tickets');
+}
+
+// Mirrors the extension's LEVELS (popup.js / content.js) — a level is
+// reached by the number of tickets handled in a single day.
+const LEVELS = [
+    { level: 1, name: 'Novice', min: 0 },
+    { level: 2, name: 'Initiate', min: 15 },
+    { level: 3, name: 'Apprentice', min: 30 },
+    { level: 4, name: 'Adept', min: 45 },
+    { level: 5, name: 'Elite', min: 60 },
+    { level: 6, name: 'Veteran', min: 70 },
+    { level: 7, name: 'Master', min: 80 },
+    { level: 8, name: 'Grandmaster', min: 90 },
+    { level: 9, name: 'Champion', min: 100 },
+    { level: 10, name: 'Paragon', min: 120 }
+];
+
+function getLevelForDayTotal(total) {
+    let current = LEVELS[0];
+    for (const l of LEVELS) if ((total || 0) >= l.min) current = l;
+    return current;
 }
 
 document.querySelectorAll('[data-lb-period]').forEach(btn => {
@@ -611,12 +639,22 @@ function renderChart() {
 // that the row's single-line layout would just clip anyway.
 const LB_RANK_BADGES = ['👑', '🥈', '🥉'];
 
-function renderLeaderboard(rows, totalField, isWeek, isSpeed) {
+function renderLeaderboard(rows, totalField, isWeek, category) {
     const list = $('leaderboard-list');
     if (!rows.length) {
-        list.innerHTML = `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
+        list.innerHTML = category === 'level'
+            ? `<div class="leaderboard-empty">No level data yet for ${isWeek ? 'last week' : 'last month'}. Agents show up here after syncing with extension version 5.8 or later.</div>`
+            : `<div class="leaderboard-empty">No data yet for ${isWeek ? 'last week' : 'last month'}.</div>`;
         return;
     }
+    const fmtScore = (v) => {
+        if (category === 'speed') return `${v || 0} TPH`;
+        if (category === 'level') {
+            const l = getLevelForDayTotal(v);
+            return `Lv ${l.level} <span class="leaderboard-level-name">${l.name}</span>`;
+        }
+        return v || 0;
+    };
     list.innerHTML = rows.map((r, i) => `
         <div class="leaderboard-row rank-${i + 1}">
             <span class="leaderboard-rank">${LB_RANK_BADGES[i] || `#${i + 1}`}</span>
@@ -624,7 +662,7 @@ function renderLeaderboard(rows, totalField, isWeek, isSpeed) {
                 ? `<img class="leaderboard-avatar" src="${r.photoUrl}" alt="" referrerpolicy="no-referrer" />`
                 : `<div class="leaderboard-avatar"></div>`}
             <span class="leaderboard-name">${escapeHtml(r.displayName || r.email || 'Agent')}</span>
-            <span class="leaderboard-total">${isSpeed ? (r[totalField] || 0) + ' TPH' : (r[totalField] || 0)}</span>
+            <span class="leaderboard-total">${fmtScore(r[totalField])}</span>
         </div>
     `).join('');
 }
@@ -1272,4 +1310,266 @@ if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('sw.js').catch(() => {});
     });
+}
+
+// ── Views: Dashboard / Monthly Report ───────────
+// ?report=YYYY-MM (what the extension's report button opens) lands
+// straight on that month's report.
+const initialReportMonth = (() => {
+    const m = new URLSearchParams(location.search).get('report');
+    return /^\d{4}-\d{2}$/.test(m || '') ? m : null;
+})();
+let currentView = 'dashboard';
+
+function showView(view) {
+    currentView = view;
+    document.querySelectorAll('[data-view-tab]').forEach(b => b.classList.toggle('active', b.dataset.viewTab === view));
+    $('view-dashboard').hidden = view !== 'dashboard';
+    $('view-report').hidden = view !== 'report';
+    const url = new URL(location.href);
+    if (view === 'report') url.searchParams.set('report', $('report-month-select').value);
+    else url.searchParams.delete('report');
+    history.replaceState(null, '', url);
+    if (view === 'report') loadReport().catch(e => console.warn('[TT Dashboard] Report load failed:', e.message));
+    else renderAll(); // charts drawn while hidden have no size
+}
+
+document.querySelectorAll('[data-view-tab]').forEach(btn => {
+    btn.addEventListener('click', () => showView(btn.dataset.viewTab));
+});
+
+// ── Team Monthly Report ─────────────────────────
+// Every agent's extension publishes a summary of their own month to
+// monthlyReport/{YYYY-MM}/users/{uid} (see the extension's
+// buildMonthlyReport): total, tickets per clock hour, New tickets per clock
+// hour, active days, and per-ticket handled counts with payee issue. This
+// adds them up into the team view. A report is available from the 1st of
+// the following month; the in-progress month can be previewed too.
+const REPORT_MONTHS_BACK = 12;
+const REPORT_PIE_SLICES = 9;
+const REPORT_TOP_TICKETS = 10;
+const REPORT_REST_LABEL = 'All remaining types'; // not "Other" — that's a real payee issue type
+let reportCharts = [];
+
+function monthKeyOf(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+}
+
+function monthLabel(monthKey) {
+    const [y, m] = monthKey.split('-').map(Number);
+    return new Date(y, m - 1, 1).toLocaleString('en-US', { month: 'long', year: 'numeric' });
+}
+
+(function fillReportMonthSelect() {
+    const select = $('report-month-select');
+    const now = new Date();
+    const keys = [];
+    for (let i = 0; i <= REPORT_MONTHS_BACK; i++) keys.push(monthKeyOf(new Date(now.getFullYear(), now.getMonth() - i, 1)));
+    select.innerHTML = keys.map((key, i) => `<option value="${key}">${monthLabel(key)}${i === 0 ? ' (in progress)' : ''}</option>`).join('');
+    select.value = keys.includes(initialReportMonth) ? initialReportMonth : keys[1];
+    select.addEventListener('change', () => showView('report'));
+})();
+
+function aggregateTeamReport(docs) {
+    const team = { agents: 0, total: 0, hourly: new Array(24).fill(0), newHourly: new Array(24).fill(0), days: new Set(), tickets: new Map() };
+    docs.forEach(d => {
+        const r = safeParse(d.reportJson, null);
+        if (!r || !r.total) return;
+        team.agents++;
+        team.total += r.total;
+        (r.hourly || []).forEach((v, h) => { team.hourly[h] += v || 0; });
+        (r.newHourly || []).forEach((v, h) => { team.newHourly[h] += v || 0; });
+        (r.days || []).forEach(day => team.days.add(day));
+        Object.entries(r.tickets || {}).forEach(([num, t]) => {
+            const agg = team.tickets.get(num) || { n: 0, agents: 0, issue: '' };
+            agg.n += t.n || 0;
+            agg.agents++;
+            if (t.i && !agg.issue) agg.issue = t.i;
+            team.tickets.set(num, agg);
+        });
+    });
+    return team;
+}
+
+function fmtHourRange(h) {
+    const fmt = (x) => { const hh = x % 24; return `${hh % 12 || 12} ${hh < 12 ? 'AM' : 'PM'}`; };
+    return `${fmt(h)} – ${fmt(h + 1)}`;
+}
+
+function peakHour(hourly) {
+    let best = -1;
+    hourly.forEach((v, h) => { if (v > 0 && (best < 0 || v > hourly[best])) best = h; });
+    return best;
+}
+
+async function loadReport() {
+    const monthKey = $('report-month-select').value;
+    const status = $('report-status');
+    $('report-title').textContent = `${monthLabel(monthKey)} Report`;
+
+    const docs = [];
+    try {
+        const snap = await getDocs(collection(db, 'monthlyReport', monthKey, 'users'));
+        snap.forEach(d => docs.push(d.data()));
+    } catch (e) {
+        status.textContent = e.code === 'permission-denied'
+            ? "The report can't be read yet: the Firestore rules for monthlyReport need to be published."
+            : "Couldn't load the report. Try the 🔄 button in a moment.";
+        status.hidden = false;
+        $('report-body').hidden = true;
+        return;
+    }
+    // The month or view may have changed while this was loading.
+    if (monthKey !== $('report-month-select').value || currentView !== 'report') return;
+
+    const team = aggregateTeamReport(docs);
+    if (!team.total) {
+        status.textContent = `No report data for ${monthLabel(monthKey)} yet. It fills in as agents sync with extension version 5.8 or later.`;
+        status.hidden = false;
+        $('report-body').hidden = true;
+        return;
+    }
+    status.hidden = true;
+    $('report-body').hidden = false;
+    renderReport(team);
+}
+
+function renderReport(team) {
+    reportCharts.forEach(c => c.destroy());
+    reportCharts = [];
+
+    const activeDays = team.days.size || 1;
+    $('report-total').textContent = team.total.toLocaleString();
+    $('report-hero-sub').textContent =
+        `${team.agents} agent${team.agents === 1 ? '' : 's'} · ${team.days.size} active day${team.days.size === 1 ? '' : 's'} · ` +
+        `${(team.total / activeDays).toFixed(1)} tickets per active day`;
+
+    renderReportPie(team);
+
+    const busiest = peakHour(team.hourly);
+    $('report-busiest').innerHTML = busiest < 0 ? '' :
+        `Busiest hour: <strong>${fmtHourRange(busiest)}</strong> · ${(team.hourly[busiest] / activeDays).toFixed(1)} tickets per day on average (${team.hourly[busiest]} total)`;
+    renderReportHourBars('report-hours', team.hourly, activeDays, busiest);
+
+    const newPeak = peakHour(team.newHourly);
+    $('report-new-peak').innerHTML = newPeak < 0 ? 'No tickets were logged as New this month.' :
+        `Most new tickets arrive <strong>${fmtHourRange(newPeak)}</strong> · ${(team.newHourly[newPeak] / activeDays).toFixed(1)} per day on average (${team.newHourly[newPeak]} total)`;
+    renderReportHourBars('report-new-hours', team.newHourly, activeDays, newPeak);
+
+    renderReportTopTickets(team);
+}
+
+function renderReportPie(team) {
+    // Each ticket counts once, whoever handled it and however often.
+    const tally = new Map();
+    let unset = 0;
+    team.tickets.forEach(t => {
+        if (t.issue) tally.set(t.issue, (tally.get(t.issue) || 0) + 1);
+        else unset++;
+    });
+    const sorted = [...tally.entries()].sort((a, b) => b[1] - a[1]);
+    const shown = sorted.slice(0, REPORT_PIE_SLICES);
+    const restCount = sorted.slice(REPORT_PIE_SLICES).reduce((s, [, n]) => s + n, 0);
+    if (restCount) shown.push([REPORT_REST_LABEL, restCount]);
+
+    const withType = team.tickets.size - unset;
+    $('report-pie-note').textContent = `${withType.toLocaleString()} of ${team.tickets.size.toLocaleString()} distinct tickets had a payee issue type` +
+        (unset ? ` (${unset.toLocaleString()} had none and aren't in the chart).` : '.');
+    if (!shown.length) return;
+
+    const { tooltipBg, tooltipBorder } = getThemeChartColors();
+    const textColor = getComputedStyle(document.documentElement).getPropertyValue('--text-2').trim() || '#aaa';
+    reportCharts.push(new Chart($('report-pie').getContext('2d'), {
+        type: 'pie',
+        data: {
+            labels: shown.map(([name]) => name),
+            datasets: [{
+                data: shown.map(([, n]) => n),
+                backgroundColor: shown.map(([name], i) => name === REPORT_REST_LABEL ? '#7f8c8d' : PAYEE_PALETTE[i % PAYEE_PALETTE.length]),
+                borderColor: 'rgba(0, 0, 0, 0.15)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    position: window.innerWidth < 560 ? 'bottom' : 'right',
+                    labels: { color: textColor, boxWidth: 12, font: { size: 11, family: 'Inter, system-ui, sans-serif' } }
+                },
+                tooltip: {
+                    backgroundColor: tooltipBg, borderColor: tooltipBorder, borderWidth: 1, padding: 10, cornerRadius: 8,
+                    callbacks: {
+                        label: (item) => ` ${item.raw} tickets (${Math.round(item.raw / withType * 100)}%)`
+                    }
+                }
+            }
+        }
+    }));
+}
+
+function renderReportHourBars(canvasId, hourly, activeDays, peak) {
+    const { gridColor, gridColorY, ticksColor, tooltipBg, tooltipBorder } = getThemeChartColors();
+    const accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#10a37f';
+    const averages = hourly.map(v => +(v / activeDays).toFixed(2));
+    reportCharts.push(new Chart($(canvasId).getContext('2d'), {
+        type: 'bar',
+        data: {
+            labels: hourly.map((_, h) => `${h % 12 || 12}${h < 12 ? 'a' : 'p'}`),
+            datasets: [{
+                data: averages,
+                // The peak hour in full accent, the rest dimmed.
+                backgroundColor: hourly.map((_, h) => h === peak ? accent : hexToRgba(accent, 0.4)),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            animation: { duration: 350 },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: tooltipBg, borderColor: tooltipBorder, borderWidth: 1, padding: 10, cornerRadius: 8,
+                    callbacks: {
+                        title: (items) => fmtHourRange(items[0].dataIndex),
+                        label: (item) => ` ${averages[item.dataIndex]} per day on average · ${hourly[item.dataIndex]} total`
+                    }
+                }
+            },
+            scales: {
+                x: { grid: { color: gridColor }, ticks: { color: ticksColor, font: { size: 10, family: 'Inter, system-ui, sans-serif' }, maxRotation: 0, autoSkip: true }, border: { display: false } },
+                y: { beginAtZero: true, grid: { color: gridColorY }, ticks: { color: ticksColor, font: { size: 10, family: 'Inter, system-ui, sans-serif' } }, border: { display: false } }
+            }
+        }
+    }));
+}
+
+function renderReportTopTickets(team) {
+    const top = [...team.tickets.entries()]
+        .sort((a, b) => b[1].n - a[1].n || b[1].agents - a[1].agents)
+        .slice(0, REPORT_TOP_TICKETS);
+    const [firstNum, first] = top[0];
+    $('report-top-tickets').innerHTML = `
+        <div class="report-top-hero">
+            <div class="report-top-number">#${escapeHtml(firstNum)}</div>
+            <div class="report-top-meta">Handled ${first.n} time${first.n === 1 ? '' : 's'} by ${first.agents} agent${first.agents === 1 ? '' : 's'}${first.issue ? ` · ${escapeHtml(first.issue)}` : ''}</div>
+        </div>
+        <div class="tickets-scroll">
+            <table class="tickets-table">
+                <thead><tr><th>#</th><th>Ticket</th><th>Times handled</th><th>Agents</th><th>Payee Issue</th></tr></thead>
+                <tbody>
+                    ${top.map(([num, t], i) => `
+                        <tr>
+                            <td>${i + 1}</td>
+                            <td>#${escapeHtml(num)}</td>
+                            <td>${t.n}</td>
+                            <td>${t.agents}</td>
+                            <td class="ticket-issue">${escapeHtml(t.issue || '—')}</td>
+                        </tr>`).join('')}
+                </tbody>
+            </table>
+        </div>
+        <p class="report-note">"Times handled" counts each day an agent logged the ticket.</p>`;
 }

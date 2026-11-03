@@ -708,7 +708,7 @@ function getLastWeekKey() {
  * @param {string} photoUrl - User profile photo URL
  * @param {number} weekTotal - Total tickets for the week
  */
-async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, displayName, photoUrl, weekTotal, weekPeakSpeed) {
+async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, displayName, photoUrl, weekTotal, weekPeakSpeed, weekPeakDay) {
   const url = `${FIRESTORE_BASE}/weeklyLeaderboard/${weekKey}/users/${encodeURIComponent(uid)}`;
 
   const body = {
@@ -718,6 +718,8 @@ async function writeWeeklyLeaderboardEntry(uid, idToken, weekKey, email, display
       photoUrl: { stringValue: photoUrl || '' },
       weekTotal: { integerValue: String(weekTotal) },
       weekPeakSpeed: { doubleValue: weekPeakSpeed || 0 },
+      // Best single day in the week — the level reached (levels are per day)
+      weekPeakDay: { integerValue: String(weekPeakDay || 0) },
       weekKey: { stringValue: weekKey },
       lastUpdated: { integerValue: String(Date.now()) }
     }
@@ -771,6 +773,8 @@ async function readWeeklyLeaderboard(idToken, weekKey) {
       photoUrl: f.photoUrl?.stringValue || '',
       weekTotal: parseInt(f.weekTotal?.integerValue || '0', 10),
       weekPeakSpeed: parseFloat(f.weekPeakSpeed?.doubleValue ?? f.weekPeakSpeed?.integerValue ?? 0),
+      // Missing on entries written by versions before 5.8
+      weekPeakDay: f.weekPeakDay ? parseInt(f.weekPeakDay.integerValue || '0', 10) : null,
       weekKey: f.weekKey?.stringValue || weekKey
     };
   });
@@ -813,7 +817,7 @@ function getLastMonthKey() {
  * @param {string} photoUrl - User profile photo URL
  * @param {number} monthTotal - Total tickets for the month
  */
-async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displayName, photoUrl, monthTotal, monthPeakSpeed) {
+async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displayName, photoUrl, monthTotal, monthPeakSpeed, monthPeakDay) {
   const url = `${FIRESTORE_BASE}/monthlyLeaderboard/${monthKey}/users/${encodeURIComponent(uid)}`;
 
   const body = {
@@ -823,6 +827,8 @@ async function writeMonthlyLeaderboardEntry(uid, idToken, monthKey, email, displ
       photoUrl: { stringValue: photoUrl || '' },
       monthTotal: { integerValue: String(monthTotal) },
       monthPeakSpeed: { doubleValue: monthPeakSpeed || 0 },
+      // Best single day in the month — the level reached (levels are per day)
+      monthPeakDay: { integerValue: String(monthPeakDay || 0) },
       monthKey: { stringValue: monthKey },
       lastUpdated: { integerValue: String(Date.now()) }
     }
@@ -876,7 +882,36 @@ async function readMonthlyLeaderboard(idToken, monthKey) {
       photoUrl: f.photoUrl?.stringValue || '',
       monthTotal: parseInt(f.monthTotal?.integerValue || '0', 10),
       monthPeakSpeed: parseFloat(f.monthPeakSpeed?.doubleValue ?? f.monthPeakSpeed?.integerValue ?? 0),
+      // Missing on entries written by versions before 5.8
+      monthPeakDay: f.monthPeakDay ? parseInt(f.monthPeakDay.integerValue || '0', 10) : null,
       monthKey: f.monthKey?.stringValue || monthKey
     };
   });
+}
+
+// ── Team Monthly Report ─────────────────────────────────────────────────────
+// One document per agent per month at /monthlyReport/{monthKey}/users/{uid},
+// holding that agent's month summary (see background.js buildMonthlyReport)
+// as a JSON string. The web dashboard reads every agent's document and adds
+// them up into the team report. Same read/write rule as the leaderboards.
+async function writeMonthlyReportEntry(uid, idToken, monthKey, displayName, reportJson) {
+  const url = `${FIRESTORE_BASE}/monthlyReport/${monthKey}/users/${encodeURIComponent(uid)}`;
+
+  const body = {
+    fields: {
+      displayName: { stringValue: displayName || '' },
+      monthKey: { stringValue: monthKey },
+      reportJson: { stringValue: reportJson },
+      lastUpdated: { integerValue: String(Date.now()) }
+    }
+  };
+
+  const headers = { 'Content-Type': 'application/json' };
+  if (idToken) headers['Authorization'] = `Bearer ${idToken}`;
+
+  const response = await fetch(url, { method: 'PATCH', headers, body: JSON.stringify(body) });
+  if (!response.ok) {
+    throw new Error(`Monthly report write failed (${response.status})`);
+  }
+  return true;
 }

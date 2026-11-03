@@ -91,6 +91,12 @@
       </div>
     </header>
 
+    <nav class="view-nav">
+      <button class="view-btn active" data-view-tab="dashboard">🏠 Dashboard</button>
+      <button class="view-btn" data-view-tab="report">📊 Monthly Report</button>
+    </nav>
+
+    <div id="view-dashboard">
     <nav class="range-nav">
       <button class="range-btn active" data-range="today">Today</button>
       <button class="range-btn" data-range="week">Week</button>
@@ -172,6 +178,7 @@
         <span class="lb-category-label">Rank by</span>
         <button class="lb-cat-btn active" data-lb-cat="tickets">🎫 Tickets</button>
         <button class="lb-cat-btn" data-lb-cat="speed">⚡ Speed</button>
+        <button class="lb-cat-btn" data-lb-cat="level">🏅 Level</button>
       </div>
       <div class="leaderboard-period-label" id="leaderboard-period-label">Last Week</div>
       <div id="leaderboard-list" class="leaderboard-list"></div>
@@ -193,6 +200,49 @@
     <footer class="footer-note">
       Synced from your Chrome extension account — auto-refreshes every minute, or tap 🔄 above anytime.
     </footer>
+    </div>
+
+    <!-- ── Team Monthly Report ── -->
+    <div id="view-report" class="report-view" hidden>
+      <div class="report-toolbar">
+        <h2 class="report-title" id="report-title">Monthly Report</h2>
+        <select id="report-month-select" class="report-month-select" aria-label="Month"></select>
+      </div>
+      <p class="report-status" id="report-status">Loading report…</p>
+
+      <div id="report-body" hidden>
+        <section class="report-hero">
+          <div class="report-hero-label">Total tickets handled by the team</div>
+          <div class="report-hero-value" id="report-total">0</div>
+          <div class="report-hero-sub" id="report-hero-sub"></div>
+        </section>
+
+        <section class="report-card">
+          <h3 class="report-card-title">Payee Issue Types</h3>
+          <div class="report-pie-wrap"><canvas id="report-pie"></canvas></div>
+          <p class="report-note" id="report-pie-note"></p>
+        </section>
+
+        <section class="report-card">
+          <h3 class="report-card-title">Busiest Hours</h3>
+          <p class="report-highlight" id="report-busiest"></p>
+          <div class="report-bar-wrap"><canvas id="report-hours"></canvas></div>
+          <p class="report-note">Average tickets handled per day in each hour, across the team.</p>
+        </section>
+
+        <section class="report-card">
+          <h3 class="report-card-title">When New Tickets Arrive</h3>
+          <p class="report-highlight" id="report-new-peak"></p>
+          <div class="report-bar-wrap"><canvas id="report-new-hours"></canvas></div>
+          <p class="report-note">Average tickets logged as New per day in each hour.</p>
+        </section>
+
+        <section class="report-card">
+          <h3 class="report-card-title">Most Handled Tickets</h3>
+          <div id="report-top-tickets"></div>
+        </section>
+      </div>
+    </div>
   </div>
 
   <!-- ── Appearance / Theme Picker Modal ── -->

@@ -539,6 +539,34 @@ if ($('home-btn')) {
     });
 }
 
+// ── Monthly Report Button ──────────────────────
+// For the first week of every month, a bouncing button opens last month's
+// team report on the web dashboard. It stops bouncing once opened for that
+// month; after day 7 it's gone (the report itself stays on the dashboard).
+const MONTHLY_REPORT_PROMO_DAYS = 7; // mirrors background.js
+const REPORT_OPENED_KEY = 'monthlyReportOpened';
+
+function setupMonthlyReportButton() {
+    const btn = $('monthly-report-btn');
+    const now = new Date();
+    if (!btn || now.getDate() > MONTHLY_REPORT_PROMO_DAYS) return;
+
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const monthKey = `${lastMonth.getFullYear()}-${String(lastMonth.getMonth() + 1).padStart(2, '0')}`;
+    btn.textContent = `📊 ${lastMonth.toLocaleString('en-US', { month: 'short' })} Report`;
+    btn.hidden = false;
+
+    chrome.storage.local.get([REPORT_OPENED_KEY], (res) => {
+        if (res[REPORT_OPENED_KEY] !== monthKey) btn.classList.add('bounce');
+    });
+    btn.addEventListener('click', () => {
+        btn.classList.remove('bounce');
+        chrome.storage.local.set({ [REPORT_OPENED_KEY]: monthKey });
+        chrome.tabs.create({ url: `${DASHBOARD_URL}/?report=${monthKey}` });
+    });
+}
+setupMonthlyReportButton();
+
 $('save-name').addEventListener('click', () => {
     const name = $('agent-name-input').value.trim();
     chrome.runtime.sendMessage({ action: 'SET_AGENT_NAME', name }, () => {
@@ -2447,7 +2475,7 @@ if ($('backup-import-file')) {
 // period's total is final and stays displayed for the entire next one,
 // then rolls over once that period itself ends.
 let currentLbPeriod = 'week';
-let currentLbCategory = 'tickets'; // 'tickets' | 'speed'
+let currentLbCategory = 'tickets'; // 'tickets' | 'speed' | 'level'
 
 function renderTeamLeaderboard(period) {
     currentLbPeriod = period || currentLbPeriod;
@@ -2459,12 +2487,17 @@ function renderTeamLeaderboard(period) {
 
     const isWeek = currentLbPeriod === 'week';
     const isSpeed = currentLbCategory === 'speed';
-    const totalField = isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
+    // Level = the highest level reached on any single day of the period
+    // (levels are earned per day), so it ranks by each agent's best day.
+    const isLevel = currentLbCategory === 'level';
+    const totalField = isLevel ? (isWeek ? 'weekPeakDay' : 'monthPeakDay')
+        : isSpeed ? (isWeek ? 'weekPeakSpeed' : 'monthPeakSpeed') : (isWeek ? 'weekTotal' : 'monthTotal');
     const action = isWeek ? 'GET_WEEKLY_LEADERBOARD' : 'GET_MONTHLY_LEADERBOARD';
     const periodLabel = isWeek ? 'Last Week' : 'Last Month';
     const championLabel = isWeek ? "Last Week's Champion" : "Last Month's Champion";
     const scoreUnit = isSpeed ? 'TPH' : 'tickets';
     const fmtScore = (v) => (v || 0);
+    const levelOf = (v) => getLevelInfo(v || 0).current;
 
     // Show loading state
     podium.innerHTML = '<div class="lb-loading">Loading leaderboard…</div>';
@@ -2481,11 +2514,15 @@ function renderTeamLeaderboard(period) {
             }
 
             const entries = (response.entries || [])
-                .filter(e => !isSpeed || (e[totalField] || 0) > 0)
+                // Speed: skip agents with no speed record. Level: skip entries
+                // from versions before 5.8, which don't carry a best day yet.
+                .filter(e => isLevel ? e[totalField] != null : (!isSpeed || (e[totalField] || 0) > 0))
                 .sort((a, b) => (b[totalField] || 0) - (a[totalField] || 0));
 
             if (entries.length === 0) {
-                podium.innerHTML = `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
+                podium.innerHTML = isLevel
+                    ? `<div class="lb-empty-msg">No level data yet for ${isWeek ? 'last week' : 'last month'}. Agents show up here after syncing with version 5.8 or later.</div>`
+                    : `<div class="lb-empty-msg">No data yet for ${isWeek ? 'last week' : 'last month'}. Complete a sync to appear here!</div>`;
                 return;
             }
 
@@ -2554,9 +2591,10 @@ function renderTeamLeaderboard(period) {
 
                 const scoreEl = document.createElement('div');
                 scoreEl.className = 'lb-score';
-                scoreEl.append(`${score} `);
+                const level = isLevel ? levelOf(user[totalField]) : null;
+                scoreEl.append(isLevel ? `Lv ${level.level} ` : `${score} `);
                 const unitEl = document.createElement('span');
-                unitEl.textContent = scoreUnit;
+                unitEl.textContent = isLevel ? level.name : scoreUnit;
                 scoreEl.appendChild(unitEl);
                 card.appendChild(scoreEl);
 
@@ -2587,7 +2625,9 @@ function renderTeamLeaderboard(period) {
                         ['lb-row-rank', `#${i + 4}`],
                         ['lb-row-name', name],
                         ['lb-row-email', u.email || ''],
-                        ['lb-row-score', String(fmtScore(u[totalField]))]
+                        ['lb-row-score', isLevel
+                            ? `Lv ${levelOf(u[totalField]).level} ${levelOf(u[totalField]).name}`
+                            : String(fmtScore(u[totalField]))]
                     ].forEach(([cls, text]) => {
                         const span = document.createElement('span');
                         span.className = cls;

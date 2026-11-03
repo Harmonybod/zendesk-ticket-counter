@@ -70,6 +70,8 @@
           <h1 class="app-title">Ticket Tracker</h1>
           <span class="agent-name" id="agent-name">Zendesk Agent</span>
         </div>
+        <!-- Shown on days 1-7 of each month — opens last month's team report -->
+        <button class="report-btn" id="monthly-report-btn" hidden title="See last month's team report">📊 Report</button>
       </div>
       <div class="header-actions">
         <button class="home-btn" id="home-btn" title="Open Dashboard">🏠</button>
@@ -567,6 +569,7 @@
         <span class="lb-category-label">Rank by</span>
         <button class="lb-cat-btn active" data-lb-cat="tickets">🎫 Tickets</button>
         <button class="lb-cat-btn" data-lb-cat="speed">⚡ Speed</button>
+        <button class="lb-cat-btn" data-lb-cat="level">🏅 Level</button>
       </div>
       <div class="weekly-lb-week-label" id="weekly-lb-week-label">Last Week</div>
       <!-- Top 3 Podium -->
