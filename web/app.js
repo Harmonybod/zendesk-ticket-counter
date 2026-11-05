@@ -1448,7 +1448,7 @@ async function loadTeamReport(monthKey) {
     const uids = await loadTeamUids(monthKey);
     const agents = await Promise.all(uids.map(uid => loadAgentMonth(uid, monthKey)));
 
-    const team = { agents: 0, total: 0, hourly: new Array(24).fill(0), newHourly: new Array(24).fill(0), days: new Set(), tickets: new Map() };
+    const team = { agents: 0, total: 0, hourly: new Array(24).fill(0), newHourly: new Array(24).fill(0), days: new Set(), tickets: new Map(), byType: emptyTotals() };
     agents.forEach(({ entries, payeeIssues }) => {
         if (!entries.length) return;
         team.agents++;
@@ -1458,6 +1458,7 @@ async function loadTeamReport(monthKey) {
             const hour = new Date(e.timestamp).getHours();
             team.hourly[hour]++;
             if (e.type === 'new') team.newHourly[hour]++;
+            if (e.type in team.byType) team.byType[e.type]++;
             team.days.add(e.date);
 
             const t = team.tickets.get(e.ticketNumber) || { n: 0, agents: 0, issue: '' };
@@ -1537,7 +1538,12 @@ function renderReport(team) {
         ? `Handled ${top[1].n} time${top[1].n === 1 ? '' : 's'} by ${top[1].agents} agent${top[1].agents === 1 ? '' : 's'}`
         : '';
 
+    const closed = team.byType.closed;
+    $('report-closed-total').textContent = closed.toLocaleString();
+    $('report-closed-sub').textContent = team.total ? `${Math.round(closed / team.total * 100)}% of all tickets handled` : '';
+
     renderReportPie(team);
+    renderReportCategories(team);
 
     const busiest = peakHour(team.hourly);
     $('report-busiest').innerHTML = busiest < 0 ? '' :
@@ -1600,6 +1606,76 @@ function renderReportPie(team) {
             }
         }
     }));
+}
+
+// Doughnut of the working categories (Closed sits in the hero instead).
+const REPORT_CATEGORY_ORDER = [
+    ['new', 'New'], ['open', 'Open'], ['team', 'Team'], ['compliance', 'Compliance'], ['escalation', 'Escalation']
+];
+
+function renderReportCategories(team) {
+    const rows = REPORT_CATEGORY_ORDER.map(([key, label]) => ({ key, label, n: team.byType[key] || 0 }));
+    const total = rows.reduce((s, r) => s + r.n, 0);
+    const pct = (n) => total ? Math.round(n / total * 100) : 0;
+    $('report-cat-total').textContent = total.toLocaleString();
+
+    const legend = $('report-cat-legend');
+    legend.innerHTML = rows.map((r, i) => `
+        <li class="report-donut-item" data-index="${i}" tabindex="0">
+            <span class="report-donut-dot" style="background:${COLORS[r.key].border}"></span>
+            <span class="report-donut-name">${r.label}</span>
+            <span class="report-donut-count">${r.n.toLocaleString()}</span>
+            <span class="report-donut-pct">${pct(r.n)}%</span>
+            <span class="report-donut-bar"><span style="width:${pct(r.n)}%;background:${COLORS[r.key].border}"></span></span>
+        </li>`).join('');
+    if (!total) return;
+
+    const { tooltipBg, tooltipBorder } = getThemeChartColors();
+    const chart = new Chart($('report-categories').getContext('2d'), {
+        type: 'doughnut',
+        data: {
+            labels: rows.map(r => r.label),
+            datasets: [{
+                data: rows.map(r => r.n),
+                backgroundColor: rows.map(r => COLORS[r.key].border),
+                hoverBackgroundColor: rows.map(r => COLORS[r.key].border),
+                borderWidth: 0,
+                borderRadius: 8,
+                spacing: 4,
+                hoverOffset: 12
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '72%',
+            layout: { padding: 12 },
+            animation: { animateRotate: true, animateScale: true, duration: 900, easing: 'easeOutQuart' },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    backgroundColor: tooltipBg, borderColor: tooltipBorder, borderWidth: 1, padding: 10, cornerRadius: 8,
+                    callbacks: { label: (item) => ` ${item.raw.toLocaleString()} tickets (${pct(item.raw)}%)` }
+                }
+            }
+        }
+    });
+    reportCharts.push(chart);
+
+    // Pointing at a legend row lifts its slice out of the ring.
+    const highlight = (i) => {
+        const active = i < 0 ? [] : [{ datasetIndex: 0, index: i }];
+        chart.setActiveElements(active);
+        chart.tooltip.setActiveElements(active, { x: 0, y: 0 });
+        chart.update();
+    };
+    legend.querySelectorAll('.report-donut-item').forEach(li => {
+        const i = Number(li.dataset.index);
+        li.addEventListener('mouseenter', () => highlight(i));
+        li.addEventListener('focus', () => highlight(i));
+        li.addEventListener('mouseleave', () => highlight(-1));
+        li.addEventListener('blur', () => highlight(-1));
+    });
 }
 
 function renderReportHourBars(canvasId, hourly, activeDays, peak) {

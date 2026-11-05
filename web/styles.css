@@ -1495,6 +1495,103 @@ h1, h2 { font-weight: 700; }
   margin-top: 8px;
 }
 
+/* The top-10 table is taller than its neighbour, so it spans two rows and
+   the category doughnut fills the space beside it. */
+.report-card-tall { grid-row: span 2; }
+
+.report-donut {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.report-donut-chart {
+  position: relative;
+  flex: 0 0 240px;
+  height: 240px;
+  margin: 0 auto;
+}
+
+.report-donut-center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.report-donut-total {
+  font-size: 34px;
+  font-weight: 800;
+  line-height: 1;
+  color: var(--text-1);
+  font-variant-numeric: tabular-nums;
+}
+
+.report-donut-caption {
+  margin-top: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--text-2);
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+}
+
+.report-donut-legend {
+  flex: 1 1 220px;
+  min-width: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.report-donut-item {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto 44px;
+  grid-template-areas: "dot name count pct" ". bar bar bar";
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 6px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  cursor: default;
+  transition: background 0.15s ease;
+}
+
+.report-donut-item:hover,
+.report-donut-item:focus-visible {
+  background: var(--bg-2);
+  outline: none;
+}
+
+.report-donut-dot { grid-area: dot; width: 12px; height: 12px; border-radius: 50%; }
+.report-donut-name { grid-area: name; font-size: 13px; font-weight: 600; color: var(--text-1); }
+.report-donut-count { grid-area: count; font-size: 13px; font-weight: 700; color: var(--text-1); font-variant-numeric: tabular-nums; }
+.report-donut-pct { grid-area: pct; font-size: 12px; color: var(--text-2); text-align: right; font-variant-numeric: tabular-nums; }
+
+.report-donut-bar {
+  grid-area: bar;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.report-donut-bar span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .report-donut-item { transition: none; }
+}
+
 /* The top-10 table is short — show it whole rather than scrolling */
 .report-card .tickets-scroll {
   max-height: none;

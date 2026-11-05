@@ -228,6 +228,11 @@
               <div class="report-hero-stat-value" id="report-top-ticket">—</div>
               <div class="report-hero-sub" id="report-top-ticket-sub"></div>
             </div>
+            <div class="report-hero-stat">
+              <div class="report-hero-label">Closed tickets</div>
+              <div class="report-hero-stat-value" id="report-closed-total">0</div>
+              <div class="report-hero-sub" id="report-closed-sub"></div>
+            </div>
           </div>
         </section>
 
@@ -252,9 +257,24 @@
           <p class="report-note">Average tickets logged as New per day in each hour.</p>
         </section>
 
-        <section class="report-card">
+        <section class="report-card report-card-tall">
           <h3 class="report-card-title">Most Handled Tickets</h3>
           <div id="report-top-tickets"></div>
+        </section>
+
+        <section class="report-card">
+          <h3 class="report-card-title">Tickets by Category</h3>
+          <div class="report-donut">
+            <div class="report-donut-chart">
+              <canvas id="report-categories"></canvas>
+              <div class="report-donut-center">
+                <span class="report-donut-total" id="report-cat-total">0</span>
+                <span class="report-donut-caption">tickets</span>
+              </div>
+            </div>
+            <ul class="report-donut-legend" id="report-cat-legend"></ul>
+          </div>
+          <p class="report-note">Each ticket counts once per day, under its latest category. Closed tickets are shown at the top.</p>
         </section>
         </div>
       </div>
